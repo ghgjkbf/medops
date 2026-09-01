@@ -83,7 +83,7 @@ async def test_registry_persists_across_restart(sync: RegistrySync) -> None:
     sync.record_heartbeat("mini", "healthy", ["echo", "health_check"])
     rows2 = sync.load_all()
     assert rows2[0]["health"] == "healthy"
-    assert "echo" in [t["name"] for t in rows2[0]["tools"]]
+    assert "echo" in rows2[0]["tools"]  # load_all returns flat names
 
 
 async def test_unavailable_state_written_back(sync: RegistrySync) -> None:
