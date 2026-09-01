@@ -1,0 +1,52 @@
+[project]
+name = "medops"
+version = "0.1.0"
+description = "Open-source AI Agent management system for medical device operations (MCP + dual-agent), with fully simulated devices."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "medops-common",
+    "medops-engine",
+    "medops-sim",
+    "mcp-fw",
+    "medops-core",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "common",
+    "devices/engine",
+    "devices/sim",
+    "mcp_servers/framework",
+    "core",
+]
+
+[tool.uv.sources]
+medops-common = { workspace = true }
+medops-engine = { workspace = true }
+medops-sim = { workspace = true }
+mcp-fw = { workspace = true }
+medops-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "coverage>=7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "common/src",
+    "devices/engine/src",
+    "devices/sim/src",
+    "mcp_servers/framework/src",
+    "core/src",
+]
+asyncio_mode = "auto"
