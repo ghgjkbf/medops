@@ -8,8 +8,8 @@ import asyncio
 import json
 import socket
 import sys
+from importlib.metadata import version as pkg_version
 
-import mcp
 from mcp.client import Client
 from mcp.client.stdio import StdioServerParameters
 from mcp.server import MCPServer
@@ -62,11 +62,14 @@ async def verify_client(client: Client, label: str) -> None:
     assert r.structured_content["result"] == 3, r.structured_content
 
     r2 = await client.call_tool("get_device_status", {"device_id": "dev-007"})
-    print(f"[{label}] get_device_status -> {r2.structured_content}")
+    print(f"[{label}] get_device_status -> content[0].text={r2.content[0].text!r} structured={r2.structured_content}")
     assert not r2.is_error
-    assert isinstance(r2.structured_content, dict)
-    assert r2.structured_content["device_id"] == "dev-007"
-    assert r2.structured_content["online"] is True
+    # v2 (2.1.1): plain dict returns are serialized into TextContent JSON;
+    # structured_content is only populated for tools declaring an output schema.
+    data = r2.structured_content if r2.structured_content else json.loads(r2.content[0].text)
+    assert isinstance(data, dict)
+    assert data["device_id"] == "dev-007"
+    assert data["online"] is True
 
 
 async def http_roundtrip() -> None:
@@ -99,7 +102,7 @@ async def stdio_roundtrip() -> None:
 async def main() -> None:
     await http_roundtrip()
     await stdio_roundtrip()
-    print(f"SPIKE OK: mcp=={mcp.__version__}")
+    print(f"SPIKE OK: mcp=={pkg_version('mcp')}")
 
 
 if __name__ == "__main__":
