@@ -1,0 +1,8 @@
+[run]
+source =
+    common/src
+    devices/engine/src
+
+[report]
+show_missing = true
+skip_covered = false
