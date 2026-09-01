@@ -1,0 +1,26 @@
+[project]
+name = "mcp-ct"
+version = "0.1.0"
+description = "CT device MCP server: DICOM dir checks, tube stats, PACS connectivity (simulated)."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "mcp-fw",
+    "medops-common",
+    "medops-engine",
+    "pydicom>=3",
+]
+
+[project.scripts]
+mcp-ct = "mcp_ct.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_ct"]
+
+[tool.uv.sources]
+mcp-fw = { workspace = true }
+medops-common = { workspace = true }
+medops-engine = { workspace = true }

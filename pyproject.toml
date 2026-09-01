@@ -25,6 +25,7 @@ members = [
     "mcp_servers/framework",
     "mcp_servers/device_status",
     "mcp_servers/maintenance_db",
+    "mcp_servers/ct",
     "core",
 ]
 
@@ -35,6 +36,7 @@ medops-sim = { workspace = true }
 mcp-fw = { workspace = true }
 medops-core = { workspace = true }
 mcp-maintenance-db = { workspace = true }
+mcp-ct = { workspace = true }
 mcp-device-status = { workspace = true }
 
 [dependency-groups]
@@ -54,6 +56,7 @@ pythonpath = [
     "mcp_servers/framework/src",
     "mcp_servers/device_status/src",
     "mcp_servers/maintenance_db/src",
+    "mcp_servers/ct/src",
     "core/src",
 ]
 asyncio_mode = "auto"
