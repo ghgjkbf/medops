@@ -52,4 +52,4 @@ pythonpath = [
 asyncio_mode = "auto"
 
 [tool.ruff]
-extend-exclude = [".venv-spike"]
+extend-exclude = [".venv-spike", "spikes"]
