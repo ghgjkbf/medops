@@ -1,0 +1,46 @@
+# Tube overheat scenario (CT scanner).
+#
+# Story: cooling degradation causes tube temperature to ramp up slowly.
+# The engine ramps tube_temp from its 35 degC baseline at 0.05 degC/s.
+# At ~320s into the fault (t=380s scenario time) the temperature crosses
+# the warning threshold (~51 degC) and a WARNING is logged; at ~520s of
+# fault time it crosses the error threshold (~61 degC) and an ERROR is
+# logged; finally the automatic protection kicks in and clears the fault.
+
+scenario: tube_overheat
+device: ct
+duration_s: 600
+
+events:
+  - at_s: 60
+    action: inject_fault
+    target: tube_temp
+    params:
+      kind: ramp
+      rate: 0.05
+
+  - at_s: 380
+    action: log
+    target: tube_temp
+    params:
+      level: warning
+      message: "tube temperature above warning threshold (51 degC), check cooling"
+
+  - at_s: 520
+    action: log
+    target: tube_temp
+    params:
+      level: error
+      message: "tube temperature above error threshold (61 degC), exposure interlock imminent"
+
+  - at_s: 560
+    action: clear_fault
+    target: tube_temp
+    params: {}
+
+  - at_s: 570
+    action: log
+    target: thermal_protection
+    params:
+      level: info
+      message: "automatic thermal protection engaged, tube cooling recovered"
