@@ -6,7 +6,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import MetaData, pool
+from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -15,12 +15,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+from medops_core import models  # noqa: E402,F401  (P1-2: attach model metadata)
 from medops_core.db import get_database_url  # noqa: E402
 
 config.set_main_option("sqlalchemy.url", get_database_url())
 
-# P1-2 will attach real model metadata here.
-target_metadata = MetaData()
+target_metadata = models.Base.metadata
 
 
 def do_run_migrations(connection: Connection) -> None:

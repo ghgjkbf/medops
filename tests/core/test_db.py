@@ -108,7 +108,7 @@ async def test_alembic_upgrade_downgrade_roundtrip(scratch_db: str) -> None:
     assert "alembic_version" in names
 
     current = _run_alembic(scratch_db, "current")
-    assert "0001" in current.stdout
+    assert "head" in current.stdout
 
     _run_alembic(scratch_db, "downgrade", "base")
     current = _run_alembic(scratch_db, "current")
