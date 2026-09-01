@@ -1,20 +1,24 @@
 [project]
-name = "mcp-fw"
+name = "mcp-device-status"
 version = "0.1.0"
-description = "MCP Server template base framework — community extension point."
+description = "Device-status MCP server (simulated): process, driver and file-integrity tools."
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "mcp>=2,<3",
+    "mcp-fw",
     "medops-common",
     "psutil>=5.9",
 ]
+
+[project.scripts]
+mcp-device-status = "mcp_device_status.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_fw"]
+packages = ["src/mcp_device_status"]
 
 [tool.uv.sources]
+mcp-fw = { workspace = true }
 medops-common = { workspace = true }

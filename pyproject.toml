@@ -11,6 +11,7 @@ dependencies = [
     "medops-sim",
     "mcp-fw",
     "medops-core",
+    "mcp-device-status",
 ]
 
 [tool.uv]
@@ -22,6 +23,7 @@ members = [
     "devices/engine",
     "devices/sim",
     "mcp_servers/framework",
+    "mcp_servers/device_status",
     "core",
 ]
 
@@ -31,6 +33,7 @@ medops-engine = { workspace = true }
 medops-sim = { workspace = true }
 mcp-fw = { workspace = true }
 medops-core = { workspace = true }
+mcp-device-status = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -47,6 +50,7 @@ pythonpath = [
     "devices/engine/src",
     "devices/sim/src",
     "mcp_servers/framework/src",
+    "mcp_servers/device_status/src",
     "core/src",
 ]
 asyncio_mode = "auto"
