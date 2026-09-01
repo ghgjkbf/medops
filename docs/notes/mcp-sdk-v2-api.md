@@ -111,6 +111,9 @@ async def test_add():
 4. **stdio 模式**用于本地 agent 宿主集成：入口 `if __name__ == "__main__": mcp_server.run("stdio")`，Client 侧 `StdioServerParameters(command=..., args=[...])`。
 5. 版本断言用 `importlib.metadata.version("mcp")`，不要 `mcp.__version__`。
 6. **in-process 必须传裸 `MCPServer` 实例**：`Client(wrapper.mcp)` ✅，`Client(wrapper)` ❌（包装对象报 "does not support the asynchronous context manager protocol"）——Task 9 实测补充。
+7. **Client 不能跨 async fixture yield**：pytest-asyncio function 级 loop 下，在 fixture 里 `async with Client(...)` 再 yield，teardown 报 "cancel scope in a different task"。解法：Client 进/出放测试体内，fixture 只给 server 实例——P1-4/9/10 全部按此写。
+8. **MCP tool 回调是同步函数**：连库用同步 engine（asyncpg URL 换 psycopg2，`_sync_url()` 换算），AsyncSession 在同步回调里不可用——maintenance-db Server 范式。
+9. **uv workspace 成员新增后**：`uv sync --all-packages` 才会安装新成员的可传递依赖（默认 sync 只装 root 直接依赖）。
 
 ## 7. 环境复现
 
