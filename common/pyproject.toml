@@ -3,7 +3,7 @@ name = "medops-common"
 version = "0.1.0"
 description = "Shared constants, utilities and schemas for medops."
 requires-python = ">=3.11,<3.13"
-dependencies = []
+dependencies = ["pydantic>=2"]
 
 [build-system]
 requires = ["hatchling"]
