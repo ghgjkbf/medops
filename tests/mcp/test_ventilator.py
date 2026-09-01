@@ -50,7 +50,9 @@ async def test_realtime_params_ok(tmp_path: Path) -> None:
 
 
 async def test_realtime_params_o2_warning(tmp_path: Path) -> None:
-    _write_snapshot(tmp_path, {"o2_concentration": 88.0, "tidal_volume": 500.0, "airway_pressure": 15.0})
+    _write_snapshot(
+        tmp_path, {"o2_concentration": 88.0, "tidal_volume": 500.0, "airway_pressure": 15.0}
+    )
     server = build_server(outbox=tmp_path)
     async with Client(server.mcp) as client:
         r = _payload(await client.call_tool("get_realtime_params", {}))
@@ -59,18 +61,24 @@ async def test_realtime_params_o2_warning(tmp_path: Path) -> None:
 
 async def test_self_test_pass_and_fail(tmp_path: Path) -> None:
     server = build_server(outbox=tmp_path)
-    _write_snapshot(tmp_path, {"o2_concentration": 93.0, "tidal_volume": 500.0, "airway_pressure": 15.0})
+    _write_snapshot(
+        tmp_path, {"o2_concentration": 93.0, "tidal_volume": 500.0, "airway_pressure": 15.0}
+    )
     async with Client(server.mcp) as client:
         r = _payload(await client.call_tool("run_self_test", {}))
     assert r["overall"] == "pass"
 
     # leak scenario: pressure/volume out of range -> corresponding subsystems fail
-    _write_snapshot(tmp_path, {"o2_concentration": 93.0, "tidal_volume": 380.0, "airway_pressure": 11.0})
+    _write_snapshot(
+        tmp_path, {"o2_concentration": 93.0, "tidal_volume": 380.0, "airway_pressure": 11.0}
+    )
     async with Client(server.mcp) as client:
         r2 = _payload(await client.call_tool("run_self_test", {}))
     assert r2["overall"] == "pass"  # still above error thresholds
 
-    _write_snapshot(tmp_path, {"o2_concentration": 93.0, "tidal_volume": 200.0, "airway_pressure": 7.0})
+    _write_snapshot(
+        tmp_path, {"o2_concentration": 93.0, "tidal_volume": 200.0, "airway_pressure": 7.0}
+    )
     async with Client(server.mcp) as client:
         r3 = _payload(await client.call_tool("run_self_test", {}))
     assert r3["overall"] == "fail"
