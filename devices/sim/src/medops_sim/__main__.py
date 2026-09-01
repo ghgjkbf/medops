@@ -24,6 +24,8 @@ from medops_engine.drift import DriftModel
 from medops_engine.scenario import Scenario, ScenarioEngine
 from medops_engine.streams import HeartbeatStream, LogStream, drain_logs
 
+from medops_sim.control import FaultController
+
 _SEED = 42
 _METRIC_EVERY_S = 5
 _TICK_S = 1.0
@@ -130,10 +132,22 @@ def run_sim(args: argparse.Namespace) -> int:
     models = _build_models(device)
     heartbeat = HeartbeatStream(device_id)
     log_stream = LogStream(device_id, sink=lambda e: _print_log_line(log_stream.format_csv(e)))
+    controller = FaultController(args.outbox, device)
 
     engine: ScenarioEngine | None = None
     if args.scenario:
         engine = ScenarioEngine.load(_resolve_scenario_path(args.scenario), models=models)
+
+    class _EngineRef:
+        """Controller hook holder: hot-load a built-in scenario on command."""
+
+        def load_scenario_file(self, name: str, current_models: dict) -> None:
+            nonlocal engine
+            engine = ScenarioEngine.load(
+                _resolve_scenario_path(name), models=current_models
+            )
+
+    engine_ref = _EngineRef()
 
     outbox = Path(args.outbox)
     if device == "ct":
@@ -164,6 +178,10 @@ def run_sim(args: argparse.Namespace) -> int:
                     print(f"[INFO] scenario {engine.scenario.scenario} finished "
                           f"at t={t:.0f}s", flush=True)
                     break
+
+            applied = controller.poll(engine_ref, models)
+            if applied is not None:
+                print(f"[CONTROL] applied fault command: {applied}", flush=True)
 
             values = {name: model.next(t) for name, model in models.items()}
             write_metrics_snapshot(outbox, device_id, t, values)

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mcp_fw import MedopsMCPServer
+from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, list_dir_files, read_metrics_snapshot
 from medops_engine.dicom_writer import validate_dicom
 
@@ -27,6 +28,9 @@ class CtServer(MedopsMCPServer):
         self.register_tool(self.check_dicom_dir)
         self.register_tool(self.get_tube_stats)
         self.register_tool(self.check_pacs_connectivity)
+        self.register_tool(
+            make_set_fault_scenario_tool(outbox, "ct"), name="set_fault_scenario"
+        )
 
     def check_dicom_dir(self, directory: str = "") -> dict:
         """Validate a DICOM directory: count valid/corrupt .dcm files."""

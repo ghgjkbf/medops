@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from mcp_fw import MedopsMCPServer
+from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, list_dir_files, read_metrics_snapshot
 
 SERVER_NAME = "medops-ecg"
@@ -28,6 +29,9 @@ class EcgServer(MedopsMCPServer):
         self._outbox = Path(outbox)
         self.register_tool(self.get_waveform_quality)
         self.register_tool(self.check_export_files)
+        self.register_tool(
+            make_set_fault_scenario_tool(outbox, "ecg"), name="set_fault_scenario"
+        )
 
     def get_waveform_quality(self) -> dict:
         """Waveform SNR + (simulated) lead attach status from the snapshot."""
