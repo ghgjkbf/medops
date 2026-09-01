@@ -1,0 +1,47 @@
+# O2 cell drift scenario (ventilator).
+#
+# Story: an aging oxygen cell slowly under-reads, so the reported
+# o2_concentration ramps down from its 93% baseline at -0.01 %/s starting
+# at t=60s. After ~800s of drift the reading would cross the 85% warning
+# threshold — but the scenario flags it at t=300s (~-2.4% drift, trending
+# down) with a WARNING, escalates to ERROR at t=480s when the reading
+# nears the 85% low-O2 alarm, and finally the cell is replaced
+# (clear_fault) restoring the baseline reading.
+
+scenario: o2_cell_drift
+device: ventilator
+duration_s: 600
+
+events:
+  - at_s: 60
+    action: inject_fault
+    target: o2_concentration
+    params:
+      kind: ramp
+      rate: -0.01
+
+  - at_s: 300
+    action: log
+    target: o2_concentration
+    params:
+      level: warning
+      message: "o2 concentration trending below 91 percent, O2 cell aging suspected"
+
+  - at_s: 480
+    action: log
+    target: o2_concentration
+    params:
+      level: error
+      message: "o2 concentration below 85 percent threshold, low O2 alarm, replace O2 cell"
+
+  - at_s: 540
+    action: clear_fault
+    target: o2_concentration
+    params: {}
+
+  - at_s: 550
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "O2 cell replaced, o2 concentration reading recovered to baseline"

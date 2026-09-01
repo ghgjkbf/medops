@@ -1,0 +1,45 @@
+# Disk full scenario (DR imaging system).
+#
+# Story: the image archive partition fills up — disk_free_gb ramps down
+# from its 50 GB baseline at -0.1 GB/s starting at t=30s. At t=200s a
+# WARNING is logged (below 35 GB), at t=330s image saves start failing
+# with an ERROR (below 20 GB), and finally an administrator cleans the
+# partition (clear_fault) and normal storage resumes.
+
+scenario: disk_full
+device: dr
+duration_s: 600
+
+events:
+  - at_s: 30
+    action: inject_fault
+    target: disk_free_gb
+    params:
+      kind: ramp
+      rate: -0.1
+
+  - at_s: 200
+    action: log
+    target: disk_free_gb
+    params:
+      level: warning
+      message: "disk free space below 35 GB, image archive partition filling up"
+
+  - at_s: 330
+    action: log
+    target: image_store
+    params:
+      level: error
+      message: "failed to save image to archive, disk free space critically low"
+
+  - at_s: 500
+    action: clear_fault
+    target: disk_free_gb
+    params: {}
+
+  - at_s: 510
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "administrator cleaned archive partition, disk space recovered"
