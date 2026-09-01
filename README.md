@@ -30,6 +30,8 @@
 
 **P0 status / P0 状态**（tag `v0.0.1-p0`）: repo scaffold, device simulator engine, device-status MCP server, core FastAPI skeleton, CI quality gates — all green (82 tests, ruff clean, 100% coverage on `common` + `engine`). Web UI, agents, and database wiring land in P1+. / 仓库脚手架、设备模拟引擎、device-status MCP server、core FastAPI 骨架、CI 质量门已就绪（82 个测试全绿，ruff 干净，`common`+`engine` 覆盖率 100%）；Web 界面、Agent、数据库接入在 P1 之后。
 
+**P1 status / P1 状态**（tag `v0.1.0-p1`）: full device layer runnable — 9 fault scenarios (3 per device), 6 MCP servers (device-status / ct / dr / ventilator / ecg / maintenance-db on PostgreSQL), configuration downlink (`set_fault_scenario`, HIGH_RISK_WRITE), 11 core tables via Alembic, MCP registry persisted to `mcp_server`. 152 tests green. One-command demo: `bash scripts/demo_p1.sh`. / 设备层全量可运行——9 个故障剧本（每设备 3 个）、6 个 MCP Server（maintenance-db 直连 PostgreSQL，工单状态机）、配置下发写路径（`set_fault_scenario`，高风险写）、11 张核心表 Alembic 迁移、MCP 注册表持久化；152 个测试全绿；一键演示 `bash scripts/demo_p1.sh`。
+
 ## Dev Quickstart / 开发快速开始
 
 ### 0. Prerequisites / 前置条件
