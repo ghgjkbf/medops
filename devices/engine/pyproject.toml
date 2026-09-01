@@ -3,7 +3,11 @@ name = "medops-engine"
 version = "0.1.0"
 description = "Fault-scenario engine for medops device simulators."
 requires-python = ">=3.11,<3.13"
-dependencies = []
+dependencies = [
+    "medops-common",
+    "pydicom>=3.0",
+    "pyyaml>=6.0",
+]
 
 [build-system]
 requires = ["hatchling"]
