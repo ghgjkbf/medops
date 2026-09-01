@@ -1,0 +1,45 @@
+# DR detector cooling-degradation scenario (dr).
+#
+# Story: the detector's cooling system loses efficiency, so detector
+# temperature ramps up slowly (+0.06 C/s) from the 28C baseline starting
+# at t=60s. WARNING at t=300s (detector temp above 40C, image noise
+# rising), ERROR at t=450s (detector approaching thermal shutdown).
+# Cooling system serviced at t=540s (clear_fault).
+
+scenario: dr_detector_cooling
+device: dr
+duration_s: 600
+
+events:
+  - at_s: 60
+    action: inject_fault
+    target: detector_temp
+    params:
+      kind: ramp
+      rate: 0.06
+
+  - at_s: 300
+    action: log
+    target: detector_temp
+    params:
+      level: warning
+      message: "detector temperature above 40C, image noise degrading"
+
+  - at_s: 450
+    action: log
+    target: detector_temp
+    params:
+      level: error
+      message: "detector nearing thermal shutdown, suspend acquisitions"
+
+  - at_s: 540
+    action: clear_fault
+    target: detector_temp
+    params: {}
+
+  - at_s: 550
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "cooling system serviced, detector temperature recovering"

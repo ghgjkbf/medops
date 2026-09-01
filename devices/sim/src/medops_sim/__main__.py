@@ -12,8 +12,11 @@ and exits cleanly on scenario completion or Ctrl-C.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from medops_engine.dicom_writer import write_study
@@ -41,10 +44,13 @@ DEVICE_CONFIGS: dict[str, dict[str, tuple[float, float]]] = {
     "dr": {
         "detector_temp": (28.0, 1.0),
         "disk_free_gb": (500.0, 0.0),
+        "generator_kvp": (120.0, 3.0),
+        "generator_mas": (100.0, 5.0),
     },
     "ecg": {
         "waveform_snr": (30.0, 1.0),
         "heart_rate": (72.0, 5.0),
+        "battery_voltage": (12.6, 0.1),
     },
 }
 
@@ -98,6 +104,26 @@ def _print_log_line(line: str) -> None:
     print(f"[LOG] {line}", flush=True)
 
 
+def write_metrics_snapshot(outbox: Path, device_id: str, t: float,
+                           values: dict[str, float]) -> None:
+    """Atomically write the metrics snapshot for MCP servers to read.
+
+    tmp+rename so readers never see a partial file (design §5: simulators
+    expose metrics via files in P1; TCP channel lands in P2).
+    """
+    snapshot = {
+        "device_id": device_id,
+        "ts": datetime.now(UTC).isoformat(),
+        "t": round(t, 3),
+        "metrics": values,
+    }
+    outbox.mkdir(parents=True, exist_ok=True)
+    target = outbox / "metrics_snapshot.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(snapshot), encoding="utf-8")
+    os.replace(tmp, target)
+
+
 def run_sim(args: argparse.Namespace) -> int:
     device: str = args.device_type
     device_id = f"{device}-sim-01"
@@ -109,8 +135,9 @@ def run_sim(args: argparse.Namespace) -> int:
     if args.scenario:
         engine = ScenarioEngine.load(_resolve_scenario_path(args.scenario), models=models)
 
+    outbox = Path(args.outbox)
     if device == "ct":
-        paths = write_study(args.outbox, n_files=_DICOM_STUDY_FILES, patient_prefix="SIM")
+        paths = write_study(outbox, n_files=_DICOM_STUDY_FILES, patient_prefix="SIM")
         print(f"[DICOM] wrote {len(paths)} files to {args.outbox}", flush=True)
 
     if args.metrics_port is not None:
@@ -138,9 +165,10 @@ def run_sim(args: argparse.Namespace) -> int:
                           f"at t={t:.0f}s", flush=True)
                     break
 
+            values = {name: model.next(t) for name, model in models.items()}
+            write_metrics_snapshot(outbox, device_id, t, values)
             if ticks % _METRIC_EVERY_S == 0:
-                for name, model in models.items():
-                    value = model.next(t)
+                for name, value in values.items():
                     metrics_emitted += 1
                     print(f"[METRIC] {name} {value:.3f}", flush=True)
 

@@ -1,0 +1,45 @@
+# ECG lead-off scenario (ecg).
+#
+# Story: a chest lead falls off during monitoring. waveform_snr drops
+# abruptly (step) at t=45s — lead-off is a sudden disconnection, not a
+# gradual drift. The monitor raises a WARNING at t=50s and an ERROR at
+# t=90s (lead-off alarm). A nurse reattaches the lead at t=180s
+# (clear_fault) and SNR recovers to baseline.
+
+scenario: ecg_lead_off
+device: ecg
+duration_s: 360
+
+events:
+  - at_s: 45
+    action: inject_fault
+    target: waveform_snr
+    params:
+      kind: step
+      offset: -20
+
+  - at_s: 50
+    action: log
+    target: waveform_snr
+    params:
+      level: warning
+      message: "waveform SNR dropped sharply, check electrode contact"
+
+  - at_s: 90
+    action: log
+    target: waveform_snr
+    params:
+      level: error
+      message: "LEAD OFF alarm: chest lead disconnected, reattach electrode"
+
+  - at_s: 180
+    action: clear_fault
+    target: waveform_snr
+    params: {}
+
+  - at_s: 190
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "lead reattached, waveform SNR recovered to baseline"

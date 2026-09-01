@@ -1,0 +1,57 @@
+# Ventilator circuit-leak scenario (ventilator).
+#
+# Story: a leak develops in the breathing circuit. Airway pressure steps
+# down (-4 cmH2O) at t=60s and tidal volume ramps down (-0.3 mL/s) as
+# delivered volume falls. WARNING at t=200s (tidal volume below lower
+# limit), ERROR at t=350s (severe leak, patient ventilation at risk).
+# Circuit resealed at t=480s (clear_fault), pressure and volume recover.
+
+scenario: ventilator_leak
+device: ventilator
+duration_s: 600
+
+events:
+  - at_s: 60
+    action: inject_fault
+    target: airway_pressure
+    params:
+      kind: step
+      offset: -4
+
+  - at_s: 65
+    action: inject_fault
+    target: tidal_volume
+    params:
+      kind: ramp
+      rate: -0.3
+
+  - at_s: 200
+    action: log
+    target: tidal_volume
+    params:
+      level: warning
+      message: "tidal volume below lower alarm limit, check circuit for leak"
+
+  - at_s: 350
+    action: log
+    target: airway_pressure
+    params:
+      level: error
+      message: "severe circuit leak alarm, patient ventilation compromised"
+
+  - at_s: 480
+    action: clear_fault
+    target: airway_pressure
+    params: {}
+
+  - at_s: 485
+    action: clear_fault
+    target: tidal_volume
+    params: {}
+
+  - at_s: 500
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "circuit resealed, airway pressure and tidal volume recovered"

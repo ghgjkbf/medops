@@ -1,0 +1,39 @@
+# CT PACS disconnect scenario (ct) — log-only, no metric fault.
+#
+# Story: the network link to PACS drops. There is nothing wrong with the
+# tube or any physical metric, so this scenario exercises the
+# "fault without metric drift" path: only WARNING and ERROR log events.
+# Ops restores the link at t=300s.
+
+scenario: ct_pacs_disconnect
+device: ct
+duration_s: 420
+
+events:
+  - at_s: 40
+    action: log
+    target: network
+    params:
+      level: warning
+      message: "PACS heartbeat timeout, retries exceeding threshold"
+
+  - at_s: 100
+    action: log
+    target: network
+    params:
+      level: error
+      message: "PACS connection lost, studies queueing locally (C-STORE failed)"
+
+  - at_s: 250
+    action: log
+    target: network
+    params:
+      level: warning
+      message: "local study queue above 50 exams, disk pressure rising"
+
+  - at_s: 300
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "network link restored, queued studies resending to PACS"

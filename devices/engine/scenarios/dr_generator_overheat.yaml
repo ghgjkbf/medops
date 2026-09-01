@@ -1,0 +1,57 @@
+# DR generator overheat scenario (dr).
+#
+# Story: the X-ray generator's cooling fan fails. generator_kvp steps
+# off its 120kV regulation point (+8kV ripple) at t=50s while the
+# generator body temperature ramps up (+0.08 C/s). WARNING at t=180s
+# (kV ripple out of spec), ERROR at t=320s (generator overheat alarm).
+# Fan is replaced at t=480s (clear_fault) and readings recover.
+
+scenario: dr_generator_overheat
+device: dr
+duration_s: 600
+
+events:
+  - at_s: 50
+    action: inject_fault
+    target: generator_kvp
+    params:
+      kind: step
+      offset: 8
+
+  - at_s: 55
+    action: inject_fault
+    target: detector_temp
+    params:
+      kind: ramp
+      rate: 0.08
+
+  - at_s: 180
+    action: log
+    target: generator_kvp
+    params:
+      level: warning
+      message: "kV regulation ripple out of spec, check generator cooling"
+
+  - at_s: 320
+    action: log
+    target: detector_temp
+    params:
+      level: error
+      message: "generator overheat alarm, exposure suspended"
+
+  - at_s: 480
+    action: clear_fault
+    target: generator_kvp
+    params: {}
+
+  - at_s: 485
+    action: clear_fault
+    target: detector_temp
+    params: {}
+
+  - at_s: 500
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "cooling fan replaced, generator temperature and kV regulation normal"

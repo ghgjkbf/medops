@@ -1,0 +1,45 @@
+# ECG battery-low scenario (ecg).
+#
+# Story: the battery ages and its voltage ramps down slowly from the
+# 12.6V baseline (-0.005 V/s) starting at t=30s. At t=240s the monitor
+# logs a WARNING (battery low, ~11.4V trending down); at t=400s an ERROR
+# (battery critically low, imminent shutdown). At t=500s the device is
+# plugged into mains power (clear_fault) and voltage recovers.
+
+scenario: ecg_battery_low
+device: ecg
+duration_s: 600
+
+events:
+  - at_s: 30
+    action: inject_fault
+    target: battery_voltage
+    params:
+      kind: ramp
+      rate: -0.005
+
+  - at_s: 240
+    action: log
+    target: battery_voltage
+    params:
+      level: warning
+      message: "battery voltage trending low, schedule charging"
+
+  - at_s: 400
+    action: log
+    target: battery_voltage
+    params:
+      level: error
+      message: "battery critically low, connect AC power to avoid shutdown"
+
+  - at_s: 500
+    action: clear_fault
+    target: battery_voltage
+    params: {}
+
+  - at_s: 510
+    action: log
+    target: maintenance
+    params:
+      level: info
+      message: "device connected to AC power, battery charging"
