@@ -26,6 +26,9 @@ members = [
     "mcp_servers/device_status",
     "mcp_servers/maintenance_db",
     "mcp_servers/ct",
+    "mcp_servers/dr",
+    "mcp_servers/ventilator",
+    "mcp_servers/ecg",
     "core",
 ]
 
@@ -37,6 +40,9 @@ mcp-fw = { workspace = true }
 medops-core = { workspace = true }
 mcp-maintenance-db = { workspace = true }
 mcp-ct = { workspace = true }
+mcp-dr = { workspace = true }
+mcp-ventilator = { workspace = true }
+mcp-ecg = { workspace = true }
 mcp-device-status = { workspace = true }
 
 [dependency-groups]
@@ -57,6 +63,9 @@ pythonpath = [
     "mcp_servers/device_status/src",
     "mcp_servers/maintenance_db/src",
     "mcp_servers/ct/src",
+    "mcp_servers/dr/src",
+    "mcp_servers/ventilator/src",
+    "mcp_servers/ecg/src",
     "core/src",
 ]
 asyncio_mode = "auto"
