@@ -22,6 +22,12 @@ coverage.xml
 .env
 .env.*
 
+# PostgreSQL local data (deploy/README-pg.md)
+deploy/pgdata/
+
+# SQLite dev database
+*.db
+
 # Node (web/)
 node_modules/
 
