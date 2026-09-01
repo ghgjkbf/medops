@@ -110,6 +110,7 @@ async def test_add():
 3. **生产部署**：`mcp_server.run("streamable-http", host=..., port=...)` 或把 `streamable_http_app()` 挂进既有 ASGI 服务；路径保持默认 `/mcp`，Client 直接传完整 URL。
 4. **stdio 模式**用于本地 agent 宿主集成：入口 `if __name__ == "__main__": mcp_server.run("stdio")`，Client 侧 `StdioServerParameters(command=..., args=[...])`。
 5. 版本断言用 `importlib.metadata.version("mcp")`，不要 `mcp.__version__`。
+6. **in-process 必须传裸 `MCPServer` 实例**：`Client(wrapper.mcp)` ✅，`Client(wrapper)` ❌（包装对象报 "does not support the asynchronous context manager protocol"）——Task 9 实测补充。
 
 ## 7. 环境复现
 
