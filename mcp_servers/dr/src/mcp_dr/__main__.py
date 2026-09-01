@@ -1,6 +1,6 @@
 """CLI entry: ``python -m mcp_dr --transport http --port 8802``.
 
-NOTE: all device data served here is SIMULATED (毕业设计 / open-source demo).
+NOTE: all device data served here is simulated (synthetic data only).
 """
 
 import argparse

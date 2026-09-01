@@ -1,6 +1,6 @@
 # medops 设备层架构（P1）
 
-> 论文素材：设备层组件图 + 配置下发（写路径）时序。设计依据 `docs/specs/2026-08-31-medops-design.md` §3/§5.4。
+> 设备层组件图 + 配置下发（写路径）时序。设计依据 `docs/specs/2026-08-31-medops-design.md` §3/§5.4。
 
 ## 组件图
 
@@ -27,7 +27,7 @@
 控制通道（P1）：**控制文件**。MCP 工具 `set_fault_scenario` 原子写
 `<outbox>/control/<device>_fault.json`；模拟器每 tick 轮询 mtime，变化即应用。
 
-## 配置下发时序（写路径，答辩演示核心）
+## 配置下发时序（写路径，演示核心）
 
 ```
 Agent(P2)/演示脚本      mcp-ct Server          模拟器(medops-sim ct)        PostgreSQL

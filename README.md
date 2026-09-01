@@ -28,9 +28,7 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
-**P0 status / P0 状态**（tag `v0.0.1-p0`）: repo scaffold, device simulator engine, device-status MCP server, core FastAPI skeleton, CI quality gates — all green (82 tests, ruff clean, 100% coverage on `common` + `engine`). Web UI, agents, and database wiring land in P1+. / 仓库脚手架、设备模拟引擎、device-status MCP server、core FastAPI 骨架、CI 质量门已就绪（82 个测试全绿，ruff 干净，`common`+`engine` 覆盖率 100%）；Web 界面、Agent、数据库接入在 P1 之后。
-
-**P1 status / P1 状态**（tag `v0.1.0-p1`）: full device layer runnable — 9 fault scenarios (3 per device), 6 MCP servers (device-status / ct / dr / ventilator / ecg / maintenance-db on PostgreSQL), configuration downlink (`set_fault_scenario`, HIGH_RISK_WRITE), 11 core tables via Alembic, MCP registry persisted to `mcp_server`. 152 tests green. One-command demo: `bash scripts/demo_p1.sh`. / 设备层全量可运行——9 个故障剧本（每设备 3 个）、6 个 MCP Server（maintenance-db 直连 PostgreSQL，工单状态机）、配置下发写路径（`set_fault_scenario`，高风险写）、11 张核心表 Alembic 迁移、MCP 注册表持久化；152 个测试全绿；一键演示 `bash scripts/demo_p1.sh`。
+**Current status / 当前状态**: device layer fully runnable — 9 fault scenarios (3 per device: ct / dr / ventilator / ecg), 6 MCP servers (device-status / ct / dr / ventilator / ecg / maintenance-db on PostgreSQL), configuration downlink (`set_fault_scenario`), 11 core tables via Alembic migrations, MCP registry persisted to the `mcp_server` table. 152 tests green, ruff clean. One-command demo: `bash scripts/demo_p1.sh`. / 设备层全量可运行——9 个故障剧本（每设备 3 个）、6 个 MCP Server（maintenance-db 直连 PostgreSQL，工单状态机）、配置下发写路径（`set_fault_scenario`）、11 张核心表 Alembic 迁移、MCP 注册表持久化；152 个测试全绿；一键演示 `bash scripts/demo_p1.sh`。Web UI and agents are under active development. / Web 界面与 Agent 层开发中。
 
 ## Dev Quickstart / 开发快速开始
 
@@ -125,7 +123,7 @@ curl http://127.0.0.1:8123/api/v1/health
 
 ```bash
 uv run ruff check .   # lint（配置在 ruff.toml）
-uv run pytest         # testpaths=tests，82 个用例应全绿
+uv run pytest         # testpaths=tests，152 个用例应全绿
 ```
 
 ### Built-in scenarios / 内置剧本
@@ -137,20 +135,26 @@ uv run python -m medops_sim ct --list-scenarios
 | 剧本 / Scenario | 设备 | 时长 | 故事 |
 |---|---|---|---|
 | `tube_overheat` | ct | 600s | 球管冷却退化 → 温度爬升 → WARNING/ERROR → 自动热保护恢复 |
-| `o2_cell_drift` | ventilator | 600s | 氧电池漂移 → 氧浓度缓慢偏移 → 校准提示 |
+| `ct_pacs_disconnect` | ct | 420s | PACS 网络中断 → 影像本地排队 → 链路恢复重传（纯日志型剧本） |
+| `o2_cell_drift` | ventilator | 600s | 氧电池漂移 → 氧浓度缓慢偏移 → 低氧报警 → 更换氧电池 |
+| `ventilator_leak` | ventilator | 600s | 呼吸管路泄漏 → 气压/潮气量下降 → 密封恢复 |
 | `disk_full` | dr | 600s | 磁盘写满 → 存储告警 → 清理恢复 |
+| `dr_generator_overheat` | dr | 600s | 发生器冷却风扇故障 → kV 超差+温度爬升 → 换风扇恢复 |
+| `dr_detector_cooling` | dr | 600s | 探测器制冷衰减 → 温度爬升 → 停机前告警 → 维护恢复 |
+| `ecg_lead_off` | ecg | 360s | 导联脱落 → SNR 骤降 → 导联报警 → 重新贴片恢复 |
+| `ecg_battery_low` | ecg | 600s | 电池老化 → 电压缓降 → 低电告警 → 接入电源 |
 
 剧本为 YAML 文件，位于 `devices/engine/scenarios/`，也可 `--scenario path/to/your.yaml` 传入自定义剧本。
 
 ### One-shot demo / 一键演示
 
 ```bash
-bash scripts/demo_p0.sh   # uv sync → 模拟器 → MCP server → 调 health_check → pytest
+bash scripts/demo_p1.sh   # PG 迁移 → 模拟器×2 → MCP server×3 → 注册表 → 故障注入 → 建工单 → pytest
 ```
 
 ### Docker (optional / 可选)
 
-`deploy/docker-compose.yml` 提供 P0 基础设施骨架（PostgreSQL + Redis），需要本机有 Docker；没有可直接跳过，上述全部命令均不依赖 Docker：
+`deploy/docker-compose.yml` 提供基础设施骨架（PostgreSQL + Redis），需要本机有 Docker；没有可直接跳过，上述全部命令均不依赖 Docker：
 
 ```bash
 cd deploy && docker compose up -d

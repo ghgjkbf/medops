@@ -3,7 +3,7 @@
 Uses MCP SDK v2 in-process transport: ``Client(mcp_server_instance)`` — no
 network, no subprocess, no real port. See docs/notes/mcp-sdk-v2-api.md §6.
 
-NOTE: all device data is SIMULATED (毕业设计 / open-source demo).
+NOTE: all device data is simulated (synthetic data only).
 """
 
 import json

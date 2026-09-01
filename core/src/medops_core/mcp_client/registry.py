@@ -148,7 +148,9 @@ class MCPRegistry:
             raise KeyError(f"no MCP server registered under name '{name}'")
         return self._handles[name]
 
-    async def call_tool(self, server_name: str, tool: str, args: dict[str, Any] | None = None) -> Any:
+    async def call_tool(
+        self, server_name: str, tool: str, args: dict[str, Any] | None = None
+    ) -> Any:
         """Convenience: route a tool call through the named server's handle."""
         return await self.get(server_name).call_tool(tool, args)
 

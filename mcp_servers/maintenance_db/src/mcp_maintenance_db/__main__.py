@@ -1,6 +1,6 @@
 """CLI entry: ``python -m mcp_maintenance_db --transport http --port 8805``.
 
-NOTE: all data served here is SIMULATED (毕业设计 / open-source demo).
+NOTE: all data served here is simulated (synthetic data only).
 """
 
 import argparse

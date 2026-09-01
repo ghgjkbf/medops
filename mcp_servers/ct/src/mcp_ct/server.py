@@ -1,7 +1,7 @@
 """CT MCP server: DICOM dir / tube stats / PACS connectivity tools.
 
 Metrics come from the simulator's metrics snapshot file (P1 file channel).
-NOTE: all device data is SIMULATED (毕业设计 / open-source demo).
+NOTE: all device data is simulated (synthetic data only).
 """
 
 from __future__ import annotations

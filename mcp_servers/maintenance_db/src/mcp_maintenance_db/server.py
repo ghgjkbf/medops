@@ -9,7 +9,7 @@ Read tools are READ_ONLY; mutating tools carry an ActionRisk annotation
 (LOW_RISK_WRITE / HIGH_RISK_WRITE) so the P2 inspector agent can enforce
 the action-grading policy (design §5.1).
 
-NOTE: all device data is SIMULATED (毕业设计 / open-source demo —
+NOTE: all device data is simulated (synthetic data only —
 no real medical devices attached).
 """
 

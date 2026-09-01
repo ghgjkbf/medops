@@ -8,7 +8,7 @@ Wraps the MCP Python SDK v2 ``MCPServer``:
 - ``serve_http(host, port)`` → ``run_streamable_http_async`` (default path /mcp).
 
 NOTE: all data served by medops MCP servers is SIMULATED
-(毕业设计 / open-source demo — no real medical devices attached).
+(simulated data — no real medical devices attached).
 """
 
 from collections.abc import Callable

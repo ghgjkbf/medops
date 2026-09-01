@@ -1,6 +1,6 @@
 """mcp-device-status: simulated device-status MCP server.
 
-NOTE: all device data is SIMULATED (毕业设计 / open-source demo —
+NOTE: all device data is simulated (synthetic data only —
 no real medical devices attached).
 """
 
