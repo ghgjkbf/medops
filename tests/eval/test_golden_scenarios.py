@@ -61,7 +61,8 @@ def _build_registry() -> MCPRegistry:
         return {"count": 0, "plans": []}
 
     def factory(cfg):  # noqa: ANN001, ANN202
-        return Client({"ct": ct, "ventilator": vent, "dr": dr, "ecg": ecg, "maintenance-db": mdb}[cfg.name])
+        servers = {"ct": ct, "ventilator": vent, "dr": dr, "ecg": ecg, "maintenance-db": mdb}
+        return Client(servers[cfg.name])
 
     reg = MCPRegistry(client_factory=factory)
     for name in ("ct", "ventilator", "dr", "ecg", "maintenance-db"):
