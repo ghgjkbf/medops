@@ -59,7 +59,8 @@ async def test_escalation_at_threshold(db_engine: AsyncEngine) -> None:
     notifications: list[dict] = []
     engine = AlertingEngine(engine=db_engine, sinks=[notifications.append])
     try:
-        await _seed_alerts(db_engine, "ct-sim-01", ESCALATION_THRESHOLD, AlertLevel.WARNING.value)
+        n = ESCALATION_THRESHOLD
+        await _seed_alerts(db_engine, "ct-sim-01", n, AlertLevel.WARNING.value)
         escalated = await engine.escalate_if_needed("ct-sim-01")
         assert escalated is True
         assert notifications and notifications[0]["type"] == "escalation"
