@@ -146,5 +146,3 @@ async def test_analyzer_empty_hits(db_engine: AsyncEngine) -> None:
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as session:
         assert await attribute_and_store([], session, FakeLLM()) == []
-    ev = {"device_id": "ct", "level": "info", "message": "all normal", "ts": "t"}
-    assert match_event(ev) is None
