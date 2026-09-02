@@ -21,12 +21,22 @@ from medops_core.models import ChatMessage, ChatSession
 # Intent rules: (pattern, intent, tool_hint) — first match wins. Rules keep
 # tool selection deterministic; the LLM only phrases the final answer.
 _INTENT_RULES: list[tuple[str, str, str | None]] = [
-    (r"温度|tube|球管", "status_query", "get_tube_stats"),
+    # dr (探测器/发生器 must precede generic 温度)
+    (r"探测器|发生器|kV|kv|磁盘|存储|图像噪声|噪声", "status_query", "get_detector_temp"),
+    # ct
+    (r"温度|球管|曝光|tube", "status_query", "get_tube_stats"),
+    (r"DICOM|影像目录", "status_query", "check_dicom_dir"),
+    (r"PACS|pacs|连不上", "status_query", "check_pacs_connectivity"),
+    # ventilator
+    (r"自检", "status_query", "run_self_test"),
     (r"氧浓度|潮气量|气道|通气|呼吸机", "status_query", "get_realtime_params"),
-    (r"探测|发生器|DR|dr\b", "status_query", "get_detector_temp"),
+    # ecg
     (r"心电|波形|导联|SNR|snr", "status_query", "get_waveform_quality"),
-    (r"工单|维修|修复", "ledger", "query_alerts"),
+    # ledger / maintenance
+    (r"告警|预警", "ledger", "query_alerts"),
+    (r"工单|维修", "ledger", "query_alerts"),
     (r"保养|维护|维保|到期", "maintenance", "get_maintenance_due"),
+    (r"台账|设备列表", "ledger", "query_alerts"),
     (r"你好|帮助|能做什么|hello|help", "chitchat", None),
 ]
 
