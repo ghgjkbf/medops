@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -33,6 +35,7 @@ from medops_core.alerting import AlertingEngine
 from medops_core.db import async_session_factory
 from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
 from medops_core.mcp_client.sync import RegistrySync
+from medops_core.models import ChatMessage, ChatSession
 
 
 def build_llm() -> LLMClient | FakeLLM:
@@ -105,19 +108,47 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     @application.post("/api/v1/chat")
     async def chat(req: ChatRequest) -> dict:
         llm = getattr(application.state, "llm", None) or build_llm()
+        trajectory: list[dict[str, Any]] = []
+        answer: str
+        provider = "rules"
         if application.state.registry.handles:
             agent = SecretaryAgent(llm, application.state.registry, session=None)
             result = await agent.run(req.message)
-            return {
-                "answer": result.answer,
-                "trajectory": result.trajectory_dicts(),
-                "provider_used": result.provider_used,
-            }
-        # degraded mode: no servers -> rule-based answer, no tool calls
+            answer = result.answer
+            trajectory = result.trajectory_dicts()
+            provider = result.provider_used
+        else:  # degraded mode: no servers -> rule-based answer, no tool calls
+            answer = rule_based_fallback(req.message)
+
+        # persist chat (best-effort; DB may be absent in degraded mode)
+        try:
+            async with async_session_factory() as session:
+                session.add(
+                    ChatSession(session_key=f"api-{datetime.now(UTC).timestamp()}")
+                )
+                await session.flush()
+                session.add(
+                    ChatMessage(
+                        session_id=1,
+                        role="user",
+                        content=req.message,
+                    )
+                )
+                session.add(
+                    ChatMessage(
+                        session_id=1,
+                        role="assistant",
+                        content=answer,
+                        tool_trace=trajectory,
+                    )
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
         return {
-            "answer": rule_based_fallback(req.message),
-            "trajectory": [],
-            "provider_used": "rules",
+            "answer": answer,
+            "trajectory": trajectory,
+            "provider_used": provider,
         }
 
     @application.get("/api/v1/agents/status")
