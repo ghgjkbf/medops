@@ -1,0 +1,169 @@
+"""External API endpoint registry: DB-backed configs for any API (P2.5).
+
+Outbound:
+- `llm_providers_from_db()` merges api_endpoint rows (kind=llm) into the
+  LLM fallback chain alongside env providers.
+- `ExternalApiClient` calls any registered endpoint (bearer / custom
+  header auth) — exposed to agents as the `call_external_api` tool.
+
+Inbound:
+- `api_key_auth` FastAPI dependency validates X-API-Key against enabled
+  rows; when no keys are configured the API stays open (demo-friendly).
+"""
+
+from __future__ import annotations
+
+import httpx
+from fastapi import Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
+
+from medops_core.agents.llm import ProviderConfig
+from medops_core.models import ApiEndpoint
+
+
+class EndpointRegistry:
+    """DB-backed registry of external API endpoints (sync sessions)."""
+
+    def __init__(self, session_factory: sessionmaker) -> None:
+        self._session_factory = session_factory
+
+    # ------------------------------------------------------------------ read
+    def list_endpoints(self, kind: str | None = None, enabled_only: bool = True) -> list[dict]:
+        with self._session_factory() as s:
+            stmt = select(ApiEndpoint).order_by(ApiEndpoint.name)
+            if kind:
+                stmt = stmt.where(ApiEndpoint.kind == kind)
+            if enabled_only:
+                stmt = stmt.where(ApiEndpoint.enabled.is_(True))
+            rows = s.scalars(stmt).all()
+            return [
+                {
+                    "name": r.name,
+                    "base_url": r.base_url,
+                    "api_key": r.api_key,
+                    "auth_type": r.auth_type,
+                    "api_header": r.api_header,
+                    "model": r.model,
+                    "kind": r.kind,
+                    "enabled": r.enabled,
+                }
+                for r in rows
+            ]
+
+    # ----------------------------------------------------------------- write
+    def upsert(
+        self,
+        name: str,
+        base_url: str,
+        api_key: str = "",
+        *,
+        auth_type: str = "bearer",
+        api_header: str | None = None,
+        model: str | None = None,
+        kind: str = "generic",
+        enabled: bool = True,
+    ) -> int:
+        with self._session_factory() as s:
+            row = s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name)).first()
+            if row is None:
+                row = ApiEndpoint(name=name, base_url=base_url)
+                s.add(row)
+            row.base_url = base_url
+            row.api_key = api_key
+            row.auth_type = auth_type
+            row.api_header = api_header
+            row.model = model
+            row.kind = kind
+            row.enabled = enabled
+            s.commit()
+            return row.id
+
+    def set_enabled(self, name: str, enabled: bool) -> None:
+        with self._session_factory() as s:
+            row = s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name)).first()
+            if row is not None:
+                row.enabled = enabled
+                s.commit()
+
+
+def llm_providers_from_db(registry: EndpointRegistry) -> list[ProviderConfig]:
+    """Convert kind=llm, OpenAI-compatible rows into ProviderConfig entries."""
+    providers: list[ProviderConfig] = []
+    for ep in registry.list_endpoints(kind="llm"):
+        if ep["auth_type"] == "none" and not ep["api_key"]:
+            continue  # an LLM provider without any credential is unusable
+        providers.append(
+            ProviderConfig(
+                name=ep["name"],
+                base_url=ep["base_url"],
+                api_key=ep["api_key"],
+                model=ep["model"] or "default",
+            )
+        )
+    return providers
+
+
+class ExternalApiClient:
+    """Call any registered endpoint with its stored credentials."""
+
+    def __init__(self, registry: EndpointRegistry, timeout_s: float = 15.0) -> None:
+        self._registry = registry
+        self._timeout_s = timeout_s
+
+    def _headers(self, ep: dict) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        if ep["auth_type"] == "bearer" and ep["api_key"]:
+            headers["Authorization"] = f"Bearer {ep['api_key']}"
+        elif ep["auth_type"] == "header" and ep["api_key"]:
+            header_name = ep["api_header"] or "X-API-Key"
+            headers[header_name] = ep["api_key"]
+        return headers
+
+    def call(self, endpoint_name: str, method: str, path: str,
+             json_body: dict | None = None) -> dict:
+        """HTTP call to a registered endpoint. Returns {status, body}."""
+        endpoints = {e["name"]: e for e in self._registry.list_endpoints()}
+        ep = endpoints.get(endpoint_name)
+        if ep is None:
+            return {"status": 0, "error": f"endpoint {endpoint_name!r} not registered"}
+        url = ep["base_url"].rstrip("/") + "/" + path.lstrip("/")
+        try:
+            resp = httpx.request(
+                method.upper(),
+                url,
+                headers=self._headers(ep),
+                json=json_body,
+                timeout=self._timeout_s,
+            )
+            try:
+                body = resp.json()
+            except ValueError:
+                body = resp.text[:2000]
+            return {"status": resp.status_code, "body": body}
+        except httpx.HTTPError as exc:
+            return {"status": 0, "error": f"{type(exc).__name__}: {exc}"}
+
+
+# ------------------------------------------------------------------- inbound
+def make_api_key_auth(session_factory: sessionmaker):
+    """FastAPI dependency: validate X-API-Key against enabled api_endpoint rows.
+
+    No keys configured -> API stays open (demo/dev friendly).
+    """
+
+    def dependency(x_api_key: str | None = Header(default=None)) -> None:
+        registry = EndpointRegistry(session_factory)
+        keys = {
+            e["api_key"]
+            for e in registry.list_endpoints(enabled_only=True)
+            if e["api_key"]
+        }
+        if not keys:
+            return  # open mode
+        if x_api_key is None:
+            raise HTTPException(status_code=401, detail="X-API-Key header required")
+        if x_api_key not in keys:
+            raise HTTPException(status_code=403, detail="invalid API key")
+
+    return dependency

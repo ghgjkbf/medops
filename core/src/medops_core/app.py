@@ -19,6 +19,7 @@ registry stays empty, scheduler is a no-op.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -32,6 +33,12 @@ from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based
 from medops_core.agents.scheduler import InspectionScheduler
 from medops_core.agents.secretary import SecretaryAgent
 from medops_core.alerting import AlertingEngine
+from medops_core.api_registry import (
+    EndpointRegistry,
+    ExternalApiClient,
+    llm_providers_from_db,
+    make_api_key_auth,
+)
 from medops_core.db import async_session_factory
 from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
 from medops_core.mcp_client.sync import RegistrySync
@@ -41,9 +48,13 @@ from medops_core.models import ChatMessage, ChatSession
 def build_llm() -> LLMClient | FakeLLM:
     if os.environ.get("MEDOPS_LLM_MODE", "").lower() == "fake":
         return FakeLLM(text="[fake] 模拟回答")
-    providers = env_providers()
+    providers = list(env_providers())
+    try:  # DB-registered LLM endpoints join the fallback chain (env first)
+        providers.extend(llm_providers_from_db(EndpointRegistry(async_session_factory)))
+    except Exception:  # noqa: BLE001 - degraded mode (no DB)
+        pass
     if not providers:
-        return FakeLLM(text="[fake] 未配置 LLM key，使用模拟回答")
+        return FakeLLM(text="[fake] 未配置 LLM provider，使用模拟回答")
     return LLMClient(providers=providers)
 
 
@@ -78,6 +89,40 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     application.state.alerting = AlertingEngine()
     application.state.scheduler = None  # built in lifespan
     application.state.inspect_seconds = inspect_s
+    application.state.endpoint_registry = EndpointRegistry(async_session_factory)
+    application.state.external_api = ExternalApiClient(application.state.endpoint_registry)
+
+    # Inbound API-key auth: enforced only when at least one key is registered
+    # (demo/dev friendly open mode otherwise). Health stays always open.
+    api_key_auth = make_api_key_auth(async_session_factory)
+
+    @application.middleware("http")
+    async def inbound_auth_middleware(request, call_next):  # noqa: ANN001
+        path = request.url.path
+        if path.startswith("/api/v1") and path != "/api/v1/health":
+            try:
+                keys = {
+                    e["api_key"]
+                    for e in application.state.endpoint_registry.list_endpoints(enabled_only=True)
+                    if e["api_key"]
+                }
+            except Exception:  # noqa: BLE001 - DB absent -> open mode
+                keys = set()
+            if keys:
+                provided = request.headers.get("X-API-Key")
+                if not provided:
+                    from fastapi.responses import JSONResponse  # noqa: PLC0415
+
+                    return JSONResponse(
+                        status_code=401, content={"detail": "X-API-Key header required"}
+                    )
+                if provided not in keys:
+                    from fastapi.responses import JSONResponse  # noqa: PLC0415
+
+                    return JSONResponse(
+                        status_code=403, content={"detail": "invalid API key"}
+                    )
+        return await call_next(request)
 
     # ---------------------------------------------------------------- routes
     @application.get("/api/v1/health")
@@ -162,12 +207,68 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             "scheduler_running": bool(scheduler and scheduler.running),
         }
 
+    # ------------------------------------------------- external API onboarding
+    @application.get("/api/v1/endpoints")
+    async def list_endpoints() -> dict:
+        eps = application.state.endpoint_registry.list_endpoints(enabled_only=False)
+        # never echo credentials back
+        for e in eps:
+            e["api_key"] = "***" if e["api_key"] else ""
+        return {"count": len(eps), "endpoints": eps}
+
+    @application.put("/api/v1/endpoints")
+    async def upsert_endpoint(ep: EndpointIn) -> dict:  # noqa: ANN401 - pydantic body
+        if ep.auth_type not in ("bearer", "header", "none"):
+            raise HTTPException(status_code=422, detail="auth_type must be bearer|header|none")
+        endpoint_id = application.state.endpoint_registry.upsert(
+            ep.name,
+            ep.base_url,
+            ep.api_key,
+            auth_type=ep.auth_type,
+            api_header=ep.api_header,
+            model=ep.model,
+            kind=ep.kind,
+            enabled=ep.enabled,
+        )
+        return {"ok": True, "id": endpoint_id, "name": ep.name}
+
+    @application.delete("/api/v1/endpoints/{name}")
+    async def disable_endpoint(name: str) -> dict:
+        application.state.endpoint_registry.set_enabled(name, False)
+        return {"ok": True, "name": name, "enabled": False}
+
+    @application.post("/api/v1/endpoints/call")
+    async def call_endpoint(req: EndpointCallIn) -> dict:
+        client: ExternalApiClient = application.state.external_api
+        result = await asyncio.to_thread(
+            client.call, req.endpoint, req.method, req.path, req.json_body
+        )
+        return result
+
     return application
 
 
 class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
+
+
+class EndpointIn(BaseModel):
+    name: str
+    base_url: str
+    api_key: str = ""
+    auth_type: str = "bearer"  # bearer | header | none
+    api_header: str | None = None
+    model: str | None = None
+    kind: str = "generic"  # llm | generic
+    enabled: bool = True
+
+
+class EndpointCallIn(BaseModel):
+    endpoint: str
+    method: str = "GET"
+    path: str = ""
+    json_body: dict | None = None
 
 
 app = create_app()

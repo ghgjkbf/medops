@@ -232,13 +232,41 @@ class ChatMessage(Base):
 
 
 class KnowledgeDoc(Base):
-    """知识库文档（embedding 在 P2 接入时补列）。"""
+    """知识库文档（embedding 在知识库检索落地时补列）。"""
 
     __tablename__ = "knowledge_doc"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
+class ApiEndpoint(Base):
+    """外部 API 接入配置（P2.5）。
+
+    统一登记外部系统的 URL 与凭据，双向使用：
+    - 出站：LLM 降级链把 OpenAI-compatible 端点并入 provider 列表；
+      Agent 经 `call_external_api` builtin 工具调用任意已登记端点。
+    - 入站：外部系统持 X-API-Key 访问 medops 全部 /api/v1 接口。
+
+    auth_type: bearer | header | none（header 用 api_header 指定自定义头名）
+    """
+
+    __tablename__ = "api_endpoint"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    base_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    api_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    auth_type: Mapped[str] = mapped_column(String(16), nullable=False, default="bearer")
+    api_header: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(64))  # OpenAI-compatible 端点用
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="generic")  # llm|generic
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     meta: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

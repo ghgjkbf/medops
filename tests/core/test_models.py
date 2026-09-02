@@ -45,7 +45,7 @@ async def session_factory(initialized_engine: AsyncEngine) -> async_sessionmaker
     return make_session_factory(initialized_engine)
 
 
-async def test_eleven_tables_exist(initialized_engine: AsyncEngine) -> None:
+async def test_core_tables_exist(initialized_engine: AsyncEngine) -> None:
     expected = {
         "mcp_server",
         "device",
@@ -58,6 +58,7 @@ async def test_eleven_tables_exist(initialized_engine: AsyncEngine) -> None:
         "chat_session",
         "chat_message",
         "knowledge_doc",
+        "api_endpoint",
     }
     assert expected == set(Base.metadata.tables.keys())
 
