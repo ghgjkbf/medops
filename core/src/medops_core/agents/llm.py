@@ -138,7 +138,9 @@ class FakeLLM:
         self.calls.append(messages)
         if self.provider_name in self.fail_providers:
             raise LLMUnavailableError(f"fake provider {self.provider_name} failed")
-        return LLMResult(text=self.text, provider_used=self.provider_name, latency_ms=self.latency_ms)
+        return LLMResult(
+            text=self.text, provider_used=self.provider_name, latency_ms=self.latency_ms
+        )
 
 
 # ------------------------------------------------------------------ rule fallback
