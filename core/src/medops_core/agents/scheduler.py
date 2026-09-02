@@ -21,6 +21,10 @@ class InspectionScheduler:
         self.last_result: InspectionResult | None = None
 
     @property
+    def inspector(self) -> InspectorAgent:
+        return self._inspector
+
+    @property
     def running(self) -> bool:
         return self._scheduler is not None and self._scheduler.running
 
