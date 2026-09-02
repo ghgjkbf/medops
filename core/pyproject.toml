@@ -16,6 +16,7 @@ dependencies = [
     "asyncpg>=0.29",
     "aiosqlite>=0.20",
     "openai>=3.7.0",
+    "langgraph>=1.2.11",
 ]
 
 [build-system]
