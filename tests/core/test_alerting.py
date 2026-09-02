@@ -48,7 +48,8 @@ async def test_recent_counts(db_engine: AsyncEngine) -> None:
 async def test_escalation_below_threshold(db_engine: AsyncEngine) -> None:
     engine = AlertingEngine(engine=db_engine, sinks=[])
     try:
-        await _seed_alerts(db_engine, "ct-sim-01", ESCALATION_THRESHOLD - 1, AlertLevel.WARNING.value)
+        n = ESCALATION_THRESHOLD - 1
+        await _seed_alerts(db_engine, "ct-sim-01", n, AlertLevel.WARNING.value)
         escalated = await engine.escalate_if_needed("ct-sim-01")
         assert escalated is False
     finally:
