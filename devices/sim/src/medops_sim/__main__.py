@@ -126,12 +126,32 @@ def write_metrics_snapshot(outbox: Path, device_id: str, t: float,
     os.replace(tmp, target)
 
 
+class _TeeLogSink:
+    """Forward log events to stdout and (optionally) a log file (P2-3a)."""
+
+    def __init__(self, stream: LogStream, log_file: Path | None) -> None:
+        self.stream = stream
+        self.log_file = log_file
+        if log_file is not None:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def __call__(self, event) -> None:  # noqa: ANN001 - LogEvent
+        line = self.stream.format_csv(event)
+        print(f"[LOG] {line}", flush=True)
+        if self.log_file is not None:
+            with self.log_file.open("a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+
+
 def run_sim(args: argparse.Namespace) -> int:
     device: str = args.device_type
     device_id = f"{device}-sim-01"
     models = _build_models(device)
     heartbeat = HeartbeatStream(device_id)
-    log_stream = LogStream(device_id, sink=lambda e: _print_log_line(log_stream.format_csv(e)))
+
+    log_file = Path(args.log_file) if getattr(args, "log_file", None) else None
+    log_stream = LogStream(device_id)
+    log_stream._sink = _TeeLogSink(log_stream, log_file)  # noqa: SLF001
     controller = FaultController(args.outbox, device)
 
     engine: ScenarioEngine | None = None
@@ -207,6 +227,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("device_type", choices=sorted(DEVICE_CONFIGS))
     parser.add_argument("--scenario", help="scenario name (built-in) or path to a YAML file")
     parser.add_argument("--outbox", default="outbox", help="DICOM output directory (ct only)")
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="append device log lines (CSV) to this file for the log pipeline",
+    )
     parser.add_argument("--metrics-port", type=int, default=None,
                         help="reserved for P1 metrics HTTP exposure")
     parser.add_argument("--list-scenarios", action="store_true",

@@ -11,13 +11,11 @@ from pathlib import Path
 from mcp_fw import MedopsMCPServer
 from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, list_dir_files, read_metrics_snapshot
+from medops_common.thresholds import THRESHOLD_RULES as _ALL_RULES
 
 SERVER_NAME = "medops-ecg"
 
-_THRESHOLD_RULES: dict[str, dict[str, float]] = {
-    "waveform_snr": {"warn_low": 20.0, "error_low": 12.0},
-    "battery_voltage": {"warn_low": 11.5, "error_low": 11.0},
-}
+_THRESHOLD_RULES = {k: _ALL_RULES[k] for k in ("waveform_snr", "battery_voltage")}
 
 # Simulated lead set (P1); real devices would read electrode impedance.
 _SIMULATED_LEADS = ["I", "II", "III", "aVR", "aVL", "aVF", "V1-V6"]

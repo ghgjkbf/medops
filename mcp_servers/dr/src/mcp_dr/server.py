@@ -11,13 +11,12 @@ from pathlib import Path
 from mcp_fw import MedopsMCPServer
 from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, read_metrics_snapshot
+from medops_common.thresholds import THRESHOLD_RULES as _ALL_RULES
 
 SERVER_NAME = "medops-dr"
 
-_THRESHOLD_RULES: dict[str, dict[str, float]] = {
-    "detector_temp": {"warn_high": 40.0, "error_high": 45.0},
-    "generator_kvp": {"warn_high": 125.0, "error_high": 130.0},
-    "disk_free_gb": {"warn_low": 50.0, "error_low": 20.0},
+_THRESHOLD_RULES = {
+    k: _ALL_RULES[k] for k in ("detector_temp", "generator_kvp", "disk_free_gb")
 }
 
 

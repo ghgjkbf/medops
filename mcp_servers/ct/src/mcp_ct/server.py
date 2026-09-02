@@ -1,6 +1,7 @@
 """CT MCP server: DICOM dir / tube stats / PACS connectivity tools.
 
-Metrics come from the simulator's metrics snapshot file (P1 file channel).
+Metrics come from the simulator's metrics snapshot file (P1 file channel);
+thresholds come from medops_common.thresholds (single source of truth).
 NOTE: all device data is simulated (synthetic data only).
 """
 
@@ -11,14 +12,12 @@ from pathlib import Path
 from mcp_fw import MedopsMCPServer
 from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, list_dir_files, read_metrics_snapshot
+from medops_common.thresholds import THRESHOLD_RULES as _ALL_RULES
 from medops_engine.dicom_writer import validate_dicom
 
 SERVER_NAME = "medops-ct"
 
-# Threshold rules for CT metrics (design §7; tube overheat scenario).
-_THRESHOLD_RULES: dict[str, dict[str, float]] = {
-    "tube_temp": {"warn_high": 40.0, "error_high": 45.0},
-}
+_THRESHOLD_RULES = {"tube_temp": _ALL_RULES["tube_temp"]}
 
 
 class CtServer(MedopsMCPServer):

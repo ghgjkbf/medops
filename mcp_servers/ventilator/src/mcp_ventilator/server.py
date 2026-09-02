@@ -11,13 +11,12 @@ from pathlib import Path
 from mcp_fw import MedopsMCPServer
 from mcp_fw.control import make_set_fault_scenario_tool
 from mcp_fw.snapshot import evaluate_thresholds, read_metrics_snapshot
+from medops_common.thresholds import THRESHOLD_RULES as _ALL_RULES
 
 SERVER_NAME = "medops-ventilator"
 
-_THRESHOLD_RULES: dict[str, dict[str, float]] = {
-    "o2_concentration": {"warn_low": 90.0, "error_low": 85.0},
-    "tidal_volume": {"warn_low": 350.0, "error_low": 250.0},
-    "airway_pressure": {"warn_low": 10.0, "error_low": 8.0},
+_THRESHOLD_RULES = {
+    k: _ALL_RULES[k] for k in ("o2_concentration", "tidal_volume", "airway_pressure")
 }
 
 
