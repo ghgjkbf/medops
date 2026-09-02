@@ -38,7 +38,7 @@ async def attribute_and_store(
     for device_id, device_hits in by_device.items():
         top_level = max(
             (h.level for h in device_hits),
-            key=lambda l: {"warning": 0, "error": 1, "critical": 2}.get(l, 0),
+            key=lambda lv: {"warning": 0, "error": 1, "critical": 2}.get(lv, 0),
         )
         prompt = (
             f"设备 {device_id} 的日志触发规则告警：\n"

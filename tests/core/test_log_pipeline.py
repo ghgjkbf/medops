@@ -69,7 +69,8 @@ def test_match_keyword_warning() -> None:
 
 
 def test_match_plain_info_no_hit() -> None:
-    assert match_event({"device_id": "ct", "level": "info", "message": "all normal", "ts": "t"}) is None
+    ev = {"device_id": "ct", "level": "info", "message": "all normal", "ts": "t"}
+    assert match_event(ev) is None
 
 
 def test_match_events_batch() -> None:
@@ -94,11 +95,19 @@ async def db_engine(tmp_path) -> AsyncEngine:  # noqa: ANN001
 async def test_analyzer_llm_attribution(db_engine: AsyncEngine) -> None:
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     hits = [
-        RuleHit(device_id="ct-sim-01", level="error", message="tube overheat", rule="level:error", ts="t"),
-        RuleHit(device_id="ct-sim-01", level="warning", message="temp trending", rule="keyword:trending", ts="t"),
+        RuleHit(
+            device_id="ct-sim-01", level="error",
+            message="tube overheat", rule="level:error", ts="t",
+        ),
+        RuleHit(
+            device_id="ct-sim-01", level="warning",
+            message="temp trending", rule="keyword:trending", ts="t",
+        ),
     ]
     async with factory() as session:
-        alerts = await attribute_and_store(hits, session, FakeLLM(text="球管散热风扇故障，建议更换"))
+        alerts = await attribute_and_store(
+            hits, session, FakeLLM(text="球管散热风扇故障，建议更换")
+        )
     assert len(alerts) == 1
     assert alerts[0].device_id == "ct-sim-01"
     assert alerts[0].level == AlertLevel.CRITICAL.value
@@ -109,7 +118,10 @@ async def test_analyzer_llm_attribution(db_engine: AsyncEngine) -> None:
 async def test_analyzer_fallback_on_llm_down(db_engine: AsyncEngine) -> None:
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     hits = [
-        RuleHit(device_id="vent-sim-01", level="warning", message="o2 below threshold", rule="level:warning", ts="t"),
+        RuleHit(
+            device_id="vent-sim-01", level="warning",
+            message="o2 below threshold", rule="level:warning", ts="t",
+        ),
     ]
     fake = FakeLLM(provider_name="fake", fail_providers={"fake"})
     async with factory() as session:
@@ -134,3 +146,5 @@ async def test_analyzer_empty_hits(db_engine: AsyncEngine) -> None:
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as session:
         assert await attribute_and_store([], session, FakeLLM()) == []
+    ev = {"device_id": "ct", "level": "info", "message": "all normal", "ts": "t"}
+    assert match_event(ev) is None

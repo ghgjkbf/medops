@@ -38,7 +38,8 @@ def collect_new_lines(log_file: Path, consumed_marker: Path) -> list[dict]:
     content = log_file.read_text(encoding="utf-8")
     new_lines = content[offset:].splitlines()
     consumed_marker.write_text(str(len(content)), encoding="utf-8")
-    return [d for d in (parse_log_line(l) for l in new_lines) if d is not None]
+    parsed = (parse_log_line(line) for line in new_lines)
+    return [d for d in parsed if d is not None]
 
 
 # --------------------------------------------------------------------- rules
@@ -61,8 +62,9 @@ def match_event(event: dict) -> RuleHit | None:
     level = event.get("level", "")
     message = event.get("message", "")
     if level in ("error", "critical"):
+        hit_level = "critical" if level == "critical" else "error"
         return RuleHit(
-            device_id=event["device_id"], level="critical" if level == "critical" else "error",
+            device_id=event["device_id"], level=hit_level,
             message=message, rule="level:error", ts=event["ts"],
         )
     for rule in LOG_KEYWORD_RULES:
