@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from medops_common.constants import AlertLevel
-from sqlalchemy.orm import Session
 
 from medops_core.agents.llm import FakeLLM, LLMClient, LLMUnavailableError, Message
 from medops_core.log_pipeline.rules import RuleHit
@@ -23,11 +22,13 @@ def _fallback_summary(hits: list[RuleHit]) -> str:
 
 async def attribute_and_store(
     hits: list[RuleHit],
-    session: Session,
+    session,  # AsyncSession (or Session in sync contexts)
     llm: LLMClient | FakeLLM,
 ) -> list[Alert]:
     """Group hits by device, get LLM attribution (rule fallback on failure),
     write Alert rows. Returns the created alerts."""
+    import inspect  # noqa: PLC0415
+
     if not hits:
         return []
     by_device: dict[str, list[RuleHit]] = {}
@@ -60,5 +61,8 @@ async def attribute_and_store(
         )
         session.add(alert)
         alerts.append(alert)
-    session.commit()
+
+    commit_result = session.commit()
+    if inspect.isawaitable(commit_result):
+        await commit_result
     return alerts

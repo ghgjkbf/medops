@@ -17,6 +17,7 @@ dependencies = [
     "aiosqlite>=0.20",
     "openai>=3.7.0",
     "langgraph>=1.2.11",
+    "apscheduler>=3.11.3",
 ]
 
 [build-system]

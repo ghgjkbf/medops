@@ -148,6 +148,11 @@ class MCPRegistry:
             raise KeyError(f"no MCP server registered under name '{name}'")
         return self._handles[name]
 
+    @property
+    def handles(self) -> dict[str, ServerHandle]:
+        """Read-only view of all handles (for inspection iteration)."""
+        return dict(self._handles)
+
     async def call_tool(
         self, server_name: str, tool: str, args: dict[str, Any] | None = None
     ) -> Any:
