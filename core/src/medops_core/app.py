@@ -19,13 +19,13 @@ registry stays empty, scheduler is a no-op.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from medops_core.agents.inspector import InspectorAgent
@@ -37,7 +37,6 @@ from medops_core.api_registry import (
     EndpointRegistry,
     ExternalApiClient,
     llm_providers_from_db,
-    make_api_key_auth,
 )
 from medops_core.db import async_session_factory
 from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
@@ -50,7 +49,7 @@ def build_llm() -> LLMClient | FakeLLM:
         return FakeLLM(text="[fake] 模拟回答")
     providers = list(env_providers())
     try:  # DB-registered LLM endpoints join the fallback chain (env first)
-        providers.extend(llm_providers_from_db(EndpointRegistry(async_session_factory)))
+        providers.extend(llm_providers_from_db())
     except Exception:  # noqa: BLE001 - degraded mode (no DB)
         pass
     if not providers:
@@ -94,31 +93,24 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
 
     # Inbound API-key auth: enforced only when at least one key is registered
     # (demo/dev friendly open mode otherwise). Health stays always open.
-    api_key_auth = make_api_key_auth(async_session_factory)
-
     @application.middleware("http")
     async def inbound_auth_middleware(request, call_next):  # noqa: ANN001
         path = request.url.path
         if path.startswith("/api/v1") and path != "/api/v1/health":
             try:
-                keys = {
-                    e["api_key"]
-                    for e in application.state.endpoint_registry.list_endpoints(enabled_only=True)
-                    if e["api_key"]
-                }
+                endpoints = await application.state.endpoint_registry.list_endpoints(
+                    enabled_only=True
+                )
+                keys = {e["api_key"] for e in endpoints if e["api_key"]}
             except Exception:  # noqa: BLE001 - DB absent -> open mode
                 keys = set()
             if keys:
                 provided = request.headers.get("X-API-Key")
                 if not provided:
-                    from fastapi.responses import JSONResponse  # noqa: PLC0415
-
                     return JSONResponse(
                         status_code=401, content={"detail": "X-API-Key header required"}
                     )
                 if provided not in keys:
-                    from fastapi.responses import JSONResponse  # noqa: PLC0415
-
                     return JSONResponse(
                         status_code=403, content={"detail": "invalid API key"}
                     )
@@ -210,7 +202,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     # ------------------------------------------------- external API onboarding
     @application.get("/api/v1/endpoints")
     async def list_endpoints() -> dict:
-        eps = application.state.endpoint_registry.list_endpoints(enabled_only=False)
+        eps = await application.state.endpoint_registry.list_endpoints(enabled_only=False)
         # never echo credentials back
         for e in eps:
             e["api_key"] = "***" if e["api_key"] else ""
@@ -220,7 +212,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     async def upsert_endpoint(ep: EndpointIn) -> dict:  # noqa: ANN401 - pydantic body
         if ep.auth_type not in ("bearer", "header", "none"):
             raise HTTPException(status_code=422, detail="auth_type must be bearer|header|none")
-        endpoint_id = application.state.endpoint_registry.upsert(
+        endpoint_id = await application.state.endpoint_registry.upsert(
             ep.name,
             ep.base_url,
             ep.api_key,
@@ -234,16 +226,13 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
 
     @application.delete("/api/v1/endpoints/{name}")
     async def disable_endpoint(name: str) -> dict:
-        application.state.endpoint_registry.set_enabled(name, False)
+        await application.state.endpoint_registry.set_enabled(name, False)
         return {"ok": True, "name": name, "enabled": False}
 
     @application.post("/api/v1/endpoints/call")
     async def call_endpoint(req: EndpointCallIn) -> dict:
         client: ExternalApiClient = application.state.external_api
-        result = await asyncio.to_thread(
-            client.call, req.endpoint, req.method, req.path, req.json_body
-        )
-        return result
+        return await client.call(req.endpoint, req.method, req.path, req.json_body)
 
     return application
 

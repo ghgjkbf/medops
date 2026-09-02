@@ -28,7 +28,32 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
-**Current status / 当前状态**: smart layer complete — dual agents (secretary Q&A with tool trajectory + inspector with APScheduler-driven inspection), LLM provider fallback chain (DeepSeek → Qwen → Ollama → rule fallback), log analysis pipeline (collect → rule engine → LLM attribution → alerts), alert escalation, 30-scenario golden evaluation suite (100% tool hit rate offline). Device layer: 9 fault scenarios (3 per device), 6 MCP servers, configuration downlink (`set_fault_scenario`), 11 core tables via Alembic, MCP registry persisted. 237 tests green, ruff clean. One-command demos: `bash scripts/demo_p1.sh` (device layer) · `bash scripts/demo_p2.sh` (smart layer). / 智能层完成——双 Agent（秘书问答含工具轨迹 + 巡检 Agent 定时巡检）、LLM 多 provider 降级链（DeepSeek→Qwen→Ollama→规则兜底）、日志分析管道（采集→规则→LLM 归因→告警）、告警升级、30 场景黄金评测集（离线工具命中率 100%）。设备层：9 个故障剧本、6 个 MCP Server、配置下发、11 张表 Alembic、注册表持久化；237 个测试全绿；一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）。Web UI is under active development. / Web 界面开发中。
+**Current status / 当前状态**: smart layer complete — dual agents (secretary Q&A with tool trajectory + inspector with APScheduler-driven inspection), LLM provider fallback chain (DeepSeek → Qwen → Ollama → rule fallback), log analysis pipeline (collect → rule engine → LLM attribution → alerts), alert escalation, 30-scenario golden evaluation suite (100% tool hit rate offline). Device layer: 9 fault scenarios (3 per device), 6 MCP servers, configuration downlink (`set_fault_scenario`), 12 core tables via Alembic, MCP registry persisted, external API onboarding (any API with per-endpoint URL + key, inbound X-API-Key auth). 246 tests green, ruff clean. One-command demos: `bash scripts/demo_p1.sh` (device layer) · `bash scripts/demo_p2.sh` (smart layer). / 智能层完成——双 Agent（秘书问答含工具轨迹 + 巡检 Agent 定时巡检）、LLM 多 provider 降级链（DeepSeek→Qwen→Ollama→规则兜底）、日志分析管道（采集→规则→LLM 归因→告警）、告警升级、30 场景黄金评测集（离线工具命中率 100%）。设备层：9 个故障剧本、6 个 MCP Server、配置下发、12 张表 Alembic、注册表持久化、外部 API 接入（任意 API 按端点配置 URL+Key，入站 X-API-Key 认证）；246 个测试全绿；一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）。Web UI is under active development. / Web 界面开发中。
+
+## External API Onboarding / 外部 API 接入 (P2.5)
+
+Any third-party API (HIS, PACS, LLM gateways, ...) can be onboarded with its own URL + key; and any external system can call medops APIs with an API key. / 任意外部 API（HIS、PACS、LLM 网关等）按端点配置 URL+Key 接入；外部系统亦可持 Key 调用 medops 全部接口。
+
+```bash
+# Outbound: register an external API (bearer | header | none auth) / 出站注册
+curl -X PUT localhost:8123/api/v1/endpoints -H 'Content-Type: application/json' -d '{
+  "name": "his", "base_url": "https://his.hospital.local/api",
+  "api_key": "xxx", "auth_type": "header", "api_header": "X-HIS-Key"}'
+
+# Outbound: agents/backend call it via the relay / 经中继调用
+curl -X POST localhost:8123/api/v1/endpoints/call -H 'Content-Type: application/json' \
+  -d '{"endpoint": "his", "method": "GET", "path": "patients/123"}'
+
+# LLM endpoints: register with kind=llm and they join the provider fallback chain
+#（kind=llm 的端点自动并入 LLM 降级链，排在 env 配置的 provider 之后）
+
+# Inbound: once ANY endpoint with a key exists, all /api/v1/* (except /health)
+# require X-API-Key. No keys -> open mode (demo-friendly).
+#（注册任一带 Key 端点后，全部 /api/v1/* 需带 X-API-Key；无 Key 时开放，便于演示）
+curl localhost:8123/api/v1/agents/status -H "X-API-Key: your-key"
+```
+
+Endpoint list never echoes credentials (masked as `***`). / 端点列表永不回显凭据（掩码 `***`）。
 
 ## Dev Quickstart / 开发快速开始
 

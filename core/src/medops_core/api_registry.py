@@ -7,36 +7,46 @@ Outbound:
   header auth) — exposed to agents as the `call_external_api` tool.
 
 Inbound:
-- `api_key_auth` FastAPI dependency validates X-API-Key against enabled
+- `make_api_key_auth` validates X-API-Key against enabled api_endpoint
   rows; when no keys are configured the API stays open (demo-friendly).
 """
 
 from __future__ import annotations
 
 import httpx
-from fastapi import Header, HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import sessionmaker
+from fastapi import HTTPException
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
 from medops_core.agents.llm import ProviderConfig
+from medops_core.db import get_database_url
 from medops_core.models import ApiEndpoint
 
 
-class EndpointRegistry:
-    """DB-backed registry of external API endpoints (sync sessions)."""
+def _sync_url(url: str) -> str:
+    return url.replace("+asyncpg", "+psycopg2").replace("+aiosqlite", "")
 
-    def __init__(self, session_factory: sessionmaker) -> None:
+
+class EndpointRegistry:
+    """Async-session registry of external API endpoints.
+
+    Uses AsyncSession (matching core); all methods are async.
+    """
+
+    def __init__(self, session_factory) -> None:  # noqa: ANN001 - async_sessionmaker
         self._session_factory = session_factory
 
     # ------------------------------------------------------------------ read
-    def list_endpoints(self, kind: str | None = None, enabled_only: bool = True) -> list[dict]:
-        with self._session_factory() as s:
+    async def list_endpoints(
+        self, kind: str | None = None, enabled_only: bool = True
+    ) -> list[dict]:
+        async with self._session_factory() as s:
             stmt = select(ApiEndpoint).order_by(ApiEndpoint.name)
             if kind:
                 stmt = stmt.where(ApiEndpoint.kind == kind)
             if enabled_only:
                 stmt = stmt.where(ApiEndpoint.enabled.is_(True))
-            rows = s.scalars(stmt).all()
+            rows = (await s.scalars(stmt)).all()
             return [
                 {
                     "name": r.name,
@@ -52,7 +62,7 @@ class EndpointRegistry:
             ]
 
     # ----------------------------------------------------------------- write
-    def upsert(
+    async def upsert(
         self,
         name: str,
         base_url: str,
@@ -64,8 +74,10 @@ class EndpointRegistry:
         kind: str = "generic",
         enabled: bool = True,
     ) -> int:
-        with self._session_factory() as s:
-            row = s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name)).first()
+        async with self._session_factory() as s:
+            row = (
+                await s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name))
+            ).first()
             if row is None:
                 row = ApiEndpoint(name=name, base_url=base_url)
                 s.add(row)
@@ -76,32 +88,45 @@ class EndpointRegistry:
             row.model = model
             row.kind = kind
             row.enabled = enabled
-            s.commit()
+            await s.commit()
             return row.id
 
-    def set_enabled(self, name: str, enabled: bool) -> None:
-        with self._session_factory() as s:
-            row = s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name)).first()
+    async def set_enabled(self, name: str, enabled: bool) -> None:
+        async with self._session_factory() as s:
+            row = (
+                await s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name))
+            ).first()
             if row is not None:
                 row.enabled = enabled
-                s.commit()
+                await s.commit()
 
 
-def llm_providers_from_db(registry: EndpointRegistry) -> list[ProviderConfig]:
-    """Convert kind=llm, OpenAI-compatible rows into ProviderConfig entries."""
-    providers: list[ProviderConfig] = []
-    for ep in registry.list_endpoints(kind="llm"):
-        if ep["auth_type"] == "none" and not ep["api_key"]:
-            continue  # an LLM provider without any credential is unusable
-        providers.append(
-            ProviderConfig(
-                name=ep["name"],
-                base_url=ep["base_url"],
-                api_key=ep["api_key"],
-                model=ep["model"] or "default",
-            )
-        )
-    return providers
+def llm_providers_from_db(url: str | None = None) -> list[ProviderConfig]:
+    """Sync helper: fetch kind=llm endpoints via its own sync engine.
+
+    Empty-key rows are included too (e.g. local Ollama-style gateways);
+    LLMClient decides how to handle a missing credential.
+    """
+    sync = _sync_url(url or get_database_url())
+    engine = create_engine(sync, pool_pre_ping=True)
+    try:
+        with Session(bind=engine) as s:
+            rows = s.scalars(
+                select(ApiEndpoint)
+                .where(ApiEndpoint.kind == "llm")
+                .where(ApiEndpoint.enabled.is_(True))
+            ).all()
+            return [
+                ProviderConfig(
+                    name=ep.name,
+                    base_url=ep.base_url,
+                    api_key=ep.api_key,
+                    model=ep.model or "default",
+                )
+                for ep in rows
+            ]
+    finally:
+        engine.dispose()
 
 
 class ExternalApiClient:
@@ -111,7 +136,8 @@ class ExternalApiClient:
         self._registry = registry
         self._timeout_s = timeout_s
 
-    def _headers(self, ep: dict) -> dict[str, str]:
+    @staticmethod
+    def _headers(ep: dict) -> dict[str, str]:
         headers: dict[str, str] = {}
         if ep["auth_type"] == "bearer" and ep["api_key"]:
             headers["Authorization"] = f"Bearer {ep['api_key']}"
@@ -120,22 +146,19 @@ class ExternalApiClient:
             headers[header_name] = ep["api_key"]
         return headers
 
-    def call(self, endpoint_name: str, method: str, path: str,
-             json_body: dict | None = None) -> dict:
+    async def call(self, endpoint_name: str, method: str, path: str,
+                   json_body: dict | None = None) -> dict:
         """HTTP call to a registered endpoint. Returns {status, body}."""
-        endpoints = {e["name"]: e for e in self._registry.list_endpoints()}
+        endpoints = {e["name"]: e for e in await self._registry.list_endpoints()}
         ep = endpoints.get(endpoint_name)
         if ep is None:
             return {"status": 0, "error": f"endpoint {endpoint_name!r} not registered"}
         url = ep["base_url"].rstrip("/") + "/" + path.lstrip("/")
         try:
-            resp = httpx.request(
-                method.upper(),
-                url,
-                headers=self._headers(ep),
-                json=json_body,
-                timeout=self._timeout_s,
-            )
+            async with httpx.AsyncClient(timeout=self._timeout_s) as client:
+                resp = await client.request(
+                    method.upper(), url, headers=self._headers(ep), json=json_body
+                )
             try:
                 body = resp.json()
             except ValueError:
@@ -146,19 +169,16 @@ class ExternalApiClient:
 
 
 # ------------------------------------------------------------------- inbound
-def make_api_key_auth(session_factory: sessionmaker):
+def make_api_key_auth(session_factory):
     """FastAPI dependency: validate X-API-Key against enabled api_endpoint rows.
 
     No keys configured -> API stays open (demo/dev friendly).
     """
 
-    def dependency(x_api_key: str | None = Header(default=None)) -> None:
+    async def dependency(x_api_key: str | None = None) -> None:
         registry = EndpointRegistry(session_factory)
-        keys = {
-            e["api_key"]
-            for e in registry.list_endpoints(enabled_only=True)
-            if e["api_key"]
-        }
+        endpoints = await registry.list_endpoints(enabled_only=True)
+        keys = {e["api_key"] for e in endpoints if e["api_key"]}
         if not keys:
             return  # open mode
         if x_api_key is None:
