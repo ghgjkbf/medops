@@ -43,12 +43,12 @@ SCENARIOS: list[GoldenScenario] = [
     _g("d01", "fault_diagnosis", "CT 球管过热报警了怎么回事", "get_tube_stats", "ct", ["球管"]),
     _g("d02", "fault_diagnosis", "CT 报错 tube temperature too high", "get_tube_stats", "ct"),
     _g("d03", "fault_diagnosis", "呼吸机低氧浓度报警怎么处理",
-       "get_realtime_params", "ventilator", ["氧"]),
+       "search_knowledge", None, ["氧"]),  # P4c: 怎么处理 -> KB
     _g("d04", "fault_diagnosis", "呼吸机气道压力低是怎么回事", "get_realtime_params", "ventilator"),
-    _g("d05", "fault_diagnosis", "DR 图像噪声变大什么原因", "get_detector_temp", "dr"),
+    _g("d05", "fault_diagnosis", "DR 图像噪声变大什么原因", "search_knowledge", None),  # 原因 -> KB
     _g("d06", "fault_diagnosis", "DR 发生器 kV 超差", "get_detector_temp", "dr"),
-    _g("d07", "fault_diagnosis", "心电导联脱落了怎么办", "get_waveform_quality", "ecg",
-       ["导联"]),
+    _g("d07", "fault_diagnosis", "心电导联脱落了怎么办", "search_knowledge", None,
+       ["导联"]),  # 怎么办 -> KB
     _g("d08", "fault_diagnosis", "心电 SNR 异常怎么排查", "get_waveform_quality", "ecg"),
     _g("d09", "fault_diagnosis", "CT 连不上 PACS 了", "check_pacs_connectivity", "ct"),
     _g("d10", "fault_diagnosis", "磁盘空间不足影响拍片吗", "get_detector_temp", "dr"),

@@ -6,9 +6,12 @@ import pytest
 from golden_scenarios import SCENARIOS, tool_hit
 from mcp.client import Client
 from mcp.server import MCPServer
+from medops_core import knowledge
 from medops_core.agents.llm import FakeLLM
 from medops_core.agents.secretary import SecretaryAgent, classify_intent
 from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
+from sqlalchemy import create_engine as sync_create_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 
 def _build_registry() -> MCPRegistry:
@@ -71,7 +74,7 @@ def _build_registry() -> MCPRegistry:
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[s.sid for s in SCENARIOS])
-async def test_golden_scenario(scenario) -> None:  # noqa: ANN001
+async def test_golden_scenario(scenario, db_engine) -> None:  # noqa: ANN001
     """Every scenario routes to the expected tool (or none) with FakeLLM."""
     intent = classify_intent(scenario.question)
     assert intent.tool == scenario.expected_tool, (
@@ -83,7 +86,15 @@ async def test_golden_scenario(scenario) -> None:  # noqa: ANN001
     reg = _build_registry()
     await reg.connect_all()
     fake = FakeLLM(text="评估回答")
-    agent = SecretaryAgent(fake, reg)
+    from medops_core.mcp_client.sync import _sync_url  # noqa: PLC0415
+    from medops_core.models import Base  # noqa: PLC0415
+
+    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    Base.metadata.create_all(sync_engine)
+    sync_engine.dispose()
+    factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    await knowledge.seed_builtin(factory)  # builtin KB tools get real hits
+    agent = SecretaryAgent(fake, reg, db_factory=factory)
     result = await agent.run(scenario.question)
     used = [c.name for c in result.tool_trajectory if c.ok]
     assert tool_hit(used, scenario.expected_tool), (
