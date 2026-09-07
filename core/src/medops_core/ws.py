@@ -62,10 +62,13 @@ class WebSocketSink:
 
     def __init__(self, manager: ConnectionManager) -> None:
         self._manager = manager
+        self._tasks: set[asyncio.Task] = set()  # strong refs: fire-and-forget GC guard
 
     def __call__(self, notification: dict[str, Any]) -> None:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return  # no loop (e.g. sync test context): skip push
-        loop.create_task(self._manager.broadcast({"type": "alert", **notification}))
+        task = loop.create_task(self._manager.broadcast({"type": "alert", **notification}))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)

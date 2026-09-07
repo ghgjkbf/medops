@@ -49,6 +49,7 @@ if not exist "web\dist\index.html" (
 echo       web\dist OK
 
 echo [4/4] Backend ...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 start "medops-api" /min cmd /c "uv run uvicorn medops_core.app:app --host 127.0.0.1 --port %PORT% > "%ROOT%\deploy\api.log" 2>&1"
 
 set /a tries=0

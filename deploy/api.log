@@ -1,0 +1,53 @@
+INFO:     Started server process [10420]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8123 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54359 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54360 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54368 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54370 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54371 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54372 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54373 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54376 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54378 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54379 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54380 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54381 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54382 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54383 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54384 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54386 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54387 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54388 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54391 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54392 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54398 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54402 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54404 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54405 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54406 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54408 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54409 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54410 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54412 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54413 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54414 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54415 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54416 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54417 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54419 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54420 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54421 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54422 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54423 - "WebSocket /ws/dashboard" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:54424 - "POST /api/v1/agents/inspect HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54434 - "POST /api/v1/agents/inspect HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54444 - "GET /api/v1/alerts?device_id=ct-sim-01&page_size=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54445 - "GET /api/v1/work-orders?device_id=ct-sim-01&page_size=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54446 - "POST /api/v1/chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54447 - "POST /api/v1/reports/generate?hours=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63647 - "GET /api/v1/agents/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63650 - "GET /api/v1/agents/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52683 - "GET /api/v1/agents/status HTTP/1.1" 200 OK

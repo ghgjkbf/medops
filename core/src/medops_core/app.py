@@ -131,13 +131,19 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
 
     async def _status_broadcaster(app: FastAPI) -> None:
         """Push an MCP status summary to dashboard clients every 10s."""
+        import logging  # noqa: PLC0415
+
+        log = logging.getLogger("medops.ws")
         while True:
             await asyncio.sleep(10)
-            if app.state.ws_manager.count:
-                await app.state.ws_manager.broadcast({
-                    "type": "status",
-                    "registry": app.state.registry.list_status(),
-                })
+            try:
+                if app.state.ws_manager.count:
+                    await app.state.ws_manager.broadcast({
+                        "type": "status",
+                        "registry": app.state.registry.list_status(),
+                    })
+            except Exception:  # noqa: BLE001 - one bad cycle must not kill the task
+                log.exception("status broadcast cycle failed")
 
     application = FastAPI(title="medops-core", lifespan=lifespan)
     application.state.registry = MCPRegistry()
