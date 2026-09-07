@@ -28,7 +28,14 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
-**Current status / 当前状态**: smart layer complete — dual agents (secretary Q&A with tool trajectory + inspector with APScheduler-driven inspection), LLM provider fallback chain (DeepSeek → Qwen → Ollama → rule fallback), log analysis pipeline (collect → rule engine → LLM attribution → alerts), alert escalation, 30-scenario golden evaluation suite (100% tool hit rate offline). Device layer: 9 fault scenarios (3 per device), 6 MCP servers, configuration downlink (`set_fault_scenario`), 12 core tables via Alembic, MCP registry persisted, external API onboarding (any API with per-endpoint URL + key, inbound X-API-Key auth). 246 tests green, ruff clean. One-command demos: `bash scripts/demo_p1.sh` (device layer) · `bash scripts/demo_p2.sh` (smart layer). / 智能层完成——双 Agent（秘书问答含工具轨迹 + 巡检 Agent 定时巡检）、LLM 多 provider 降级链（DeepSeek→Qwen→Ollama→规则兜底）、日志分析管道（采集→规则→LLM 归因→告警）、告警升级、30 场景黄金评测集（离线工具命中率 100%）。设备层：9 个故障剧本、6 个 MCP Server、配置下发、12 张表 Alembic、注册表持久化、外部 API 接入（任意 API 按端点配置 URL+Key，入站 X-API-Key 认证）；246 个测试全绿；一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）。Web UI is under active development. / Web 界面开发中。
+**Current status / 当前状态**: management layer complete — **v0.1.0**. Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry health, secretary-agent chat with tool-trace timeline. Backend: resource API (devices/alerts/work-orders/plans/records/logs/metrics + reports), WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding, work-order FSM single-sourced in `medops_common`. 277 tests green, ruff clean, web build green. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh`. / 管理层完成——**v0.1.0**。Web 控制台（Vue3 + Element Plus + ECharts）：总览大盘（实时告警流）、设备台账（指标趋势）、告警中心（一键转工单）、工单看板（状态机校验）、维保管理（到期高亮）、MCP 服务健康、智能问答（工具调用轨迹时间线）。后端：资源 API + 报告 + WebSocket + 周期提醒 + 外部 API 接入；工单状态机单点实现在 medops_common。277 个测试全绿，ruff/构建全绿。一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）。
+
+## ⚠️ Disclaimer / 免责声明
+
+**All device data in this project is SIMULATED for education and research.
+medops never connects to real medical devices and must not be used for
+clinical decision-making. / 本项目全部设备数据均为模拟生成，仅用于教学与
+研究。medops 不接入任何真实医疗设备，严禁用于临床决策。**
 
 ## External API Onboarding / 外部 API 接入 (P2.5)
 
