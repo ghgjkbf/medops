@@ -10,6 +10,7 @@ const routes = [
   { path: '/mcp-servers', component: () => import('../views/McpServersView.vue') },
   { path: '/api-endpoints', component: () => import('../views/ExternalApiView.vue') },
   { path: '/chat', component: () => import('../views/ChatView.vue') },
+  { path: '/knowledge', component: () => import('../views/KnowledgeView.vue') },
   { path: '/cleanup', component: () => import('../views/CleanupView.vue') },
   { path: '/help', component: () => import('../views/HelpView.vue') },
 ]

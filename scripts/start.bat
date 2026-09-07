@@ -14,7 +14,7 @@ set "PORT=8123"
 echo [1/4] PostgreSQL ...
 set "NEEDPG=0"
 "%PGBIN%\pg_isready.exe" -h 127.0.0.1 -p 55432 >nul 2>&1 || set "NEEDPG=1"
-if "%NEEDPG%"=="1" start "medops-pg" /min cmd /c ""%PGBIN%\pg_ctl.exe" -D "%PGDATA%" -l "%PGDATA%\logfile.log" -o "-p 55432" start"
+if "%NEEDPG%"=="1" powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\start-pg.ps1" -PgBin "%PGBIN%" -PgData "%PGDATA%" -Port 55432
 
 set /a tries=0
 :waitpg
@@ -50,7 +50,8 @@ echo       web\dist OK
 
 echo [4/4] Backend ...
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }" >nul 2>&1
-start "medops-api" /min cmd /c "uv run uvicorn medops_core.app:app --host 127.0.0.1 --port %PORT% > "%ROOT%\deploy\api.log" 2>&1"
+REM hidden launch (P4c) — no medops-api console window anymore
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\start-backend.ps1" -Port %PORT% -Root "%ROOT%"
 
 set /a tries=0
 :waitapi
@@ -58,11 +59,11 @@ curl -sf -o nul http://127.0.0.1:%PORT%/api/v1/health 2>nul
 if errorlevel 1 (
     set /a tries+=1
     if !tries! lss 20 goto waitapi
-    echo ERROR: backend not up in 20s. Check the medops-api window.
+    echo ERROR: backend not up in 20s. Check %ROOT%\deploy\api.log
     pause
     exit /b 1
 )
-echo       medops is running at http://127.0.0.1:%PORT%/
+echo       medops is running at http://127.0.0.1:%PORT%/ (backend runs hidden)
 if not defined MEDOPS_NO_BROWSER start "" http://127.0.0.1:%PORT%/
-echo (stop: scripts\stop.bat, or close the medops-api window)
+echo (stop: scripts\stop.bat)
 timeout /t 3 /nobreak >nul

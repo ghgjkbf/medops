@@ -51,6 +51,11 @@ export async function apiDelete<T = any>(path: string, params?: object): Promise
   return r.data.data as T
 }
 
+export async function apiUpload<T = any>(path: string, form: FormData): Promise<T> {
+  const r = await http.post(path, form)
+  return r.data.data as T
+}
+
 /** Dashboard WebSocket with auto-reconnect (design §9 layer 4). */
 export function connectDashboard(onMessage: (msg: any) => void): () => void {
   let ws: WebSocket | null = null
