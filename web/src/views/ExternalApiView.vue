@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { apiGetRaw, apiPatch, apiPut, getApiKey, setApiKey } from '../api/client'
+import { apiDelete, apiGetRaw, apiPatch, apiPut, getApiKey, setApiKey } from '../api/client'
 
 interface ExternalEndpoint {
   name: string; base_url: string; api_key: string
@@ -78,6 +78,18 @@ async function toggle(row: ExternalEndpoint, enabled: boolean) {
   load()
 }
 
+async function remove(row: ExternalEndpoint) {
+  try {
+    await ElMessageBox.confirm(
+      `删除端点「${row.name}」？Agent 将无法再调用该外部 API；若其 Key 是最后一个入站凭据，鉴权将回到开放模式。`,
+      '删除端点', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/endpoints/${row.name}`)
+  ElMessage.success(`端点 ${row.name} 已删除`)
+  load()
+}
+
 function saveLocalKey() {
   setApiKey(localKey.value)
   ElMessage.success(localKey.value ? '本地 Key 已保存' : '本地 Key 已清空（回到开放模式）')
@@ -132,6 +144,11 @@ onMounted(load)
         <el-table-column label="启用" width="90">
           <template #default="{ row }">
             <el-switch :model-value="row.enabled" @change="(v: any) => toggle(row, !!v)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80">
+          <template #default="{ row }">
+            <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

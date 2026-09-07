@@ -124,3 +124,30 @@ def test_patch_endpoint_enabled_toggle(client: TestClient) -> None:
 
 def test_patch_endpoint_unknown_404(client: TestClient) -> None:
     assert client.patch("/api/v1/endpoints/nope", json={"enabled": True}).status_code == 404
+
+
+# ------------------------------------------------------- endpoint real delete
+def test_delete_endpoint_removes_row(client: TestClient) -> None:
+    client.put("/api/v1/endpoints", json={
+        "name": "todel", "base_url": "https://x.example", "api_key": "kd1",
+    })
+    r = client.delete("/api/v1/endpoints/todel", headers={"X-API-Key": "kd1"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    names = {e["name"] for e in client.get("/api/v1/endpoints").json()["endpoints"]}
+    assert "todel" not in names
+
+
+def test_delete_endpoint_unknown_404(client: TestClient) -> None:
+    assert client.delete("/api/v1/endpoints/nope").status_code == 404
+
+
+def test_delete_last_keyed_endpoint_reopens(client: TestClient) -> None:
+    client.put("/api/v1/endpoints", json={
+        "name": "armed", "base_url": "https://x.example", "api_key": "kd2",
+    })
+    # armed: inbound auth now requires the key
+    assert client.get("/api/v1/agents/status").status_code == 401
+    r = client.delete("/api/v1/endpoints/armed", headers={"X-API-Key": "kd2"})
+    assert r.status_code == 200
+    # last keyed endpoint gone -> open mode again
+    assert client.get("/api/v1/agents/status").status_code == 200

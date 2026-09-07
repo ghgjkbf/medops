@@ -100,6 +100,19 @@ class EndpointRegistry:
                 row.enabled = enabled
                 await s.commit()
 
+    async def delete(self, name: str) -> bool:
+        """Remove the endpoint row entirely (reverts inbound auth when it
+        carried the last key). Returns False when unknown."""
+        async with self._session_factory() as s:
+            row = (
+                await s.scalars(select(ApiEndpoint).where(ApiEndpoint.name == name))
+            ).first()
+            if row is None:
+                return False
+            await s.delete(row)
+            await s.commit()
+            return True
+
 
 def llm_providers_from_db(url: str | None = None) -> list[ProviderConfig]:
     """Sync helper: fetch kind=llm endpoints via its own sync engine.

@@ -291,9 +291,11 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         return {"ok": True, "id": endpoint_id, "name": ep.name}
 
     @application.delete("/api/v1/endpoints/{name}")
-    async def disable_endpoint(name: str) -> dict:
-        await application.state.endpoint_registry.set_enabled(name, False)
-        return {"ok": True, "name": name, "enabled": False}
+    async def delete_endpoint(name: str) -> dict:
+        deleted = await application.state.endpoint_registry.delete(name)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="endpoint not found")
+        return {"ok": True, "data": {"deleted": name}}
 
     @application.patch("/api/v1/endpoints/{name}")
     async def patch_endpoint(name: str, body: EndpointPatch) -> dict:
