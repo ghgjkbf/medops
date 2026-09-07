@@ -89,7 +89,7 @@ async def test_golden_scenario(scenario, db_engine) -> None:  # noqa: ANN001
     from medops_core.mcp_client.sync import _sync_url  # noqa: PLC0415
     from medops_core.models import Base  # noqa: PLC0415
 
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
     factory = async_sessionmaker(db_engine, expire_on_commit=False)

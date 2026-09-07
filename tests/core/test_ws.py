@@ -85,13 +85,15 @@ def test_chat_ws_empty_message_error(db_engine: AsyncEngine) -> None:
 
 
 def _prepare(db_engine: AsyncEngine) -> None:
-    engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(engine)
     engine.dispose()
 
 
 def _wire(application, db_engine: AsyncEngine) -> None:  # noqa: ANN001
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     application.state.db_factory = async_sessionmaker(engine, expire_on_commit=False)

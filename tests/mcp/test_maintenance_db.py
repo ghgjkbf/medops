@@ -65,7 +65,7 @@ def _payload(result) -> dict:
 
 
 async def test_server_registers_six_tools(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     async with Client(server.mcp) as client:
         tools = await client.list_tools()
     names = {t.name for t in tools.tools}
@@ -81,7 +81,7 @@ async def test_server_registers_six_tools(seeded_db: AsyncEngine) -> None:
 
 
 async def test_query_devices_filter(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     async with Client(server.mcp) as client:
         r = _payload(await client.call_tool("query_devices", {}))
         assert r["count"] == 2
@@ -92,7 +92,7 @@ async def test_query_devices_filter(seeded_db: AsyncEngine) -> None:
 
 
 async def test_get_maintenance_due(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     async with Client(server.mcp) as client:
         r = _payload(await client.call_tool("get_maintenance_due", {"days_ahead": 30}))
         # ct plan: last done 85d ago, 90d interval -> due in ~5d (within window)
@@ -109,7 +109,7 @@ async def test_get_maintenance_due(seeded_db: AsyncEngine) -> None:
 
 
 async def test_work_order_lifecycle_and_state_machine(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     async with Client(server.mcp) as client:
         r = _payload(
             await client.call_tool(
@@ -160,7 +160,7 @@ async def test_work_order_lifecycle_and_state_machine(seeded_db: AsyncEngine) ->
 
 
 async def test_add_repair_record(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     async with Client(server.mcp) as client:
         r = _payload(
             await client.call_tool(
@@ -192,7 +192,7 @@ async def test_add_repair_record(seeded_db: AsyncEngine) -> None:
 
 
 async def test_query_alerts_level_filter(seeded_db: AsyncEngine) -> None:
-    server = MaintenanceDbServer(database_url=str(seeded_db.url))
+    server = MaintenanceDbServer(database_url=seeded_db.url.render_as_string(hide_password=False))
     with server._session_factory() as s:  # noqa: SLF001 (seed via server's own factory)
         s.add(
             Alert(

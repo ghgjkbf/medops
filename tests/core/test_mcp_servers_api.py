@@ -17,12 +17,14 @@ from sqlalchemy.pool import NullPool
 @pytest.fixture()
 def client(db_engine: AsyncEngine) -> TestClient:
     """App wired to a scratch DB; no lifespan, so the live registry is empty."""
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
 
     application = create_app()
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     application.state.db_factory = factory
     # endpoint routes use their own registry — point it at the scratch DB too
@@ -37,7 +39,7 @@ def client(db_engine: AsyncEngine) -> TestClient:
 def _db_server_names(db_engine: AsyncEngine) -> set[str]:
     from sqlalchemy import text
 
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     with sync_engine.connect() as conn:
         names = {
             r[0] for r in conn.execute(text("SELECT name FROM mcp_server"))

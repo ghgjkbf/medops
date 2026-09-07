@@ -27,7 +27,7 @@ from sqlalchemy.pool import NullPool
 @pytest.fixture()
 def client(db_engine: AsyncEngine) -> TestClient:
     """App wired to a scratch DB with seeded rows (all sync, one loop)."""
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
 
     # seed via sync sessions — no event loop involved
@@ -66,7 +66,9 @@ def client(db_engine: AsyncEngine) -> TestClient:
     sync_engine.dispose()
 
     application = create_app()
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     application.state.endpoint_registry = _StubRegistry()
     application.state.db_factory = async_sessionmaker(engine, expire_on_commit=False)
     yield TestClient(application)

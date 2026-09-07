@@ -22,7 +22,7 @@ async def initialized_db(db_engine: AsyncEngine) -> AsyncEngine:
 
 @pytest.fixture()
 def sync(initialized_db: AsyncEngine) -> RegistrySync:
-    return RegistrySync(database_url=str(initialized_db.url))
+    return RegistrySync(database_url=initialized_db.url.render_as_string(hide_password=False))
 
 
 def _mini_server() -> MCPServer:
@@ -108,7 +108,7 @@ async def test_row_count_matches(sync: RegistrySync, initialized_db: AsyncEngine
 
     sync.upsert_server("a", "http://a/mcp", "HEALTHY", ["t1"])
     sync.upsert_server("b", "http://b/mcp", "HEALTHY", ["t2", "t3"])
-    eng = create_async_engine(str(initialized_db.url))
+    eng = create_async_engine(initialized_db.url.render_as_string(hide_password=False))
     async with eng.connect() as conn:
         count = (await conn.execute(sa_select(McpServer.id))).scalars().all()
     await eng.dispose()

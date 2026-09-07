@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 
 def _seed_db(db_engine: AsyncEngine, plans: list[MaintenancePlan]) -> None:
-    engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(engine)
     with sessionmaker(bind=engine, expire_on_commit=False)() as s:
         s.add_all(plans)

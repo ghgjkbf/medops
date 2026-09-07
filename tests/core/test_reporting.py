@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 
 
 def _seed(db_engine: AsyncEngine) -> None:
-    engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(engine)
     now = datetime.now(UTC)
     with sessionmaker(bind=engine, expire_on_commit=False)() as s:
@@ -82,7 +82,9 @@ async def test_report_llm_failure_degrades_to_template(db_engine: AsyncEngine) -
 def test_report_endpoint(db_engine: AsyncEngine) -> None:
     _seed(db_engine)
     application = create_app()
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     application.state.db_factory = async_sessionmaker(engine, expire_on_commit=False)

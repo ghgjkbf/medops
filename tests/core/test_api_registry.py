@@ -56,7 +56,7 @@ def test_llm_providers_from_db(db_engine: AsyncEngine) -> None:
     from medops_core.models import ApiEndpoint
     from sqlalchemy.orm import sessionmaker
 
-    engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(engine)
     with sessionmaker(bind=engine)() as s:
         s.add(ApiEndpoint(name="db-llm", base_url="https://llm.example.com/v1",
@@ -65,7 +65,7 @@ def test_llm_providers_from_db(db_engine: AsyncEngine) -> None:
                           kind="generic"))
         s.commit()
 
-    providers = llm_providers_from_db(str(db_engine.url))
+    providers = llm_providers_from_db(db_engine.url.render_as_string(hide_password=False))
     names = [p.name for p in providers]
     assert "db-llm" in names and "generic" not in names
     llm = [p for p in providers if p.name == "db-llm"][0]
@@ -168,12 +168,14 @@ def test_app_endpoints_crud(db_engine: AsyncEngine) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import NullPool
 
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
 
     application = create_app()
-    async_engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    async_engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     application.state.endpoint_registry = EndpointRegistry(
         async_sessionmaker(async_engine, expire_on_commit=False)
     )

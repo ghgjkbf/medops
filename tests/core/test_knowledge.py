@@ -16,22 +16,26 @@ from sqlalchemy.pool import NullPool
 
 @pytest.fixture()
 def factory(db_engine: AsyncEngine) -> async_sessionmaker:
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
     return async_sessionmaker(
-        create_async_engine(str(db_engine.url), poolclass=NullPool),
+        create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        ),
         expire_on_commit=False,
     )
 
 
 @pytest.fixture()
 def client(db_engine: AsyncEngine) -> TestClient:
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
     application = create_app()
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     application.state.db_factory = async_sessionmaker(engine, expire_on_commit=False)
     application.state.endpoint_registry = _StubRegistry()
     yield TestClient(application)
