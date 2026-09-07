@@ -35,7 +35,7 @@ from medops_common.constants import (
     can_transition_work_order,
 )
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 
 from medops_core.agents.inspector import InspectorAgent
 from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based_fallback
@@ -342,6 +342,29 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 raise HTTPException(status_code=404, detail="device not found")
             return {"ok": True, "data": _row_dict(row)}
 
+    @application.delete("/api/v1/devices/{device_id}")
+    async def delete_device(device_id: str) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(Device).where(Device.device_id == device_id))
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="device not found")
+            # cascade-clean rows keyed by this device_id (plain-string refs, no FK)
+            await s.execute(delete(MaintenanceRecord).where(
+                MaintenanceRecord.device_id == device_id))
+            await s.execute(delete(Alert).where(Alert.device_id == device_id))
+            await s.execute(delete(WorkOrder).where(WorkOrder.device_id == device_id))
+            await s.execute(delete(MaintenancePlan).where(
+                MaintenancePlan.device_id == device_id))
+            await s.execute(delete(DeviceLog).where(DeviceLog.device_id == device_id))
+            await s.execute(delete(DeviceMetric).where(
+                DeviceMetric.device_id == device_id))
+            await s.delete(row)
+            await s.commit()
+        return {"ok": True, "data": {"deleted": device_id}}
+
     @application.get("/api/v1/alerts")
     async def list_alerts(
         page: int = 1, page_size: int = 20,
@@ -356,6 +379,36 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             if level:
                 items = [i for i in items if i["level"] == level]
             return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.delete("/api/v1/alerts/{alert_id}")
+    async def delete_alert(alert_id: int) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (await s.scalars(select(Alert).where(Alert.id == alert_id))).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="alert not found")
+            await s.delete(row)
+            await s.commit()
+        return {"ok": True, "data": {"deleted": 1}}
+
+    @application.delete("/api/v1/alerts")
+    async def bulk_delete_alerts(
+        device_id: str | None = None, level: str | None = None, before: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            stmt = delete(Alert)
+            if device_id:
+                stmt = stmt.where(Alert.device_id == device_id)
+            if level:
+                stmt = stmt.where(Alert.level == level)
+            cutoff = _parse_before(before)
+            if cutoff is not None:
+                stmt = stmt.where(Alert.created_at < cutoff)
+            result = await s.execute(stmt)
+            deleted = result.rowcount
+            await s.commit()
+        return {"ok": True, "data": {"deleted": deleted}}
 
     @application.get("/api/v1/work-orders")
     async def list_work_orders(
@@ -411,6 +464,25 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             await s.commit()
             return {"ok": True, "data": _row_dict(row)}
 
+    @application.delete("/api/v1/work-orders/{work_order_id}")
+    async def delete_work_order(work_order_id: int) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(WorkOrder).where(WorkOrder.id == work_order_id))
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="work order not found")
+            # detach children: alert / maintenance_record.work_order_id -> NULL
+            await s.execute(update(Alert).where(Alert.work_order_id == work_order_id)
+                            .values(work_order_id=None))
+            await s.execute(update(MaintenanceRecord)
+                            .where(MaintenanceRecord.work_order_id == work_order_id)
+                            .values(work_order_id=None))
+            await s.delete(row)
+            await s.commit()
+        return {"ok": True, "data": {"deleted": 1}}
+
     @application.get("/api/v1/maintenance-plans")
     async def list_maintenance_plans(
         page: int = 1, page_size: int = 20, device_id: str | None = None,
@@ -431,6 +503,19 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             s.add(row)
             await s.commit()
             return {"ok": True, "data": _row_dict(row)}
+
+    @application.delete("/api/v1/maintenance-plans/{plan_id}")
+    async def delete_maintenance_plan(plan_id: int) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(MaintenancePlan).where(MaintenancePlan.id == plan_id))
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="maintenance plan not found")
+            await s.delete(row)
+            await s.commit()
+        return {"ok": True, "data": {"deleted": 1}}
 
     @application.get("/api/v1/maintenance-records")
     async def list_maintenance_records(
@@ -457,6 +542,21 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             await s.commit()
             return {"ok": True, "data": _row_dict(row)}
 
+    @application.delete("/api/v1/maintenance-records/{record_id}")
+    async def delete_maintenance_record(record_id: int) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(
+                    select(MaintenanceRecord).where(MaintenanceRecord.id == record_id)
+                )
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="maintenance record not found")
+            await s.delete(row)
+            await s.commit()
+        return {"ok": True, "data": {"deleted": 1}}
+
     @application.get("/api/v1/logs")
     async def list_logs(
         page: int = 1, page_size: int = 50,
@@ -474,6 +574,21 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 items = [i for i in items if i["level"] == level]
             return {"ok": True, "data": _paginate(items, page, page_size)}
 
+    @application.delete("/api/v1/logs")
+    async def bulk_delete_logs(device_id: str | None = None, before: str | None = None) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            stmt = delete(DeviceLog)
+            if device_id:
+                stmt = stmt.where(DeviceLog.device_id == device_id)
+            cutoff = _parse_before(before)
+            if cutoff is not None:
+                stmt = stmt.where(DeviceLog.ts < cutoff)
+            result = await s.execute(stmt)
+            deleted = result.rowcount
+            await s.commit()
+        return {"ok": True, "data": {"deleted": deleted}}
+
     @application.get("/api/v1/metrics")
     async def list_metrics(
         page: int = 1, page_size: int = 200,
@@ -490,6 +605,32 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             if metric_name:
                 items = [i for i in items if i["metric_name"] == metric_name]
             return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.delete("/api/v1/metrics")
+    async def bulk_delete_metrics(
+        device_id: str | None = None, before: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            stmt = delete(DeviceMetric)
+            if device_id:
+                stmt = stmt.where(DeviceMetric.device_id == device_id)
+            cutoff = _parse_before(before)
+            if cutoff is not None:
+                stmt = stmt.where(DeviceMetric.ts < cutoff)
+            result = await s.execute(stmt)
+            deleted = result.rowcount
+            await s.commit()
+        return {"ok": True, "data": {"deleted": deleted}}
+
+    @application.delete("/api/v1/chat-sessions")
+    async def clear_chat_sessions() -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            result = await s.execute(delete(ChatSession))
+            deleted = result.rowcount
+            await s.commit()
+        return {"ok": True, "data": {"deleted": deleted}}
 
     @application.post("/api/v1/reports/generate")
     async def generate_report_endpoint(hours: int = 24) -> dict:
@@ -619,6 +760,17 @@ def _paginate(items: list[dict], page: int, page_size: int) -> dict:
     start = (page - 1) * page_size
     return {"total": total, "page": page, "page_size": page_size,
             "items": items[start:start + page_size]}
+
+
+def _parse_before(raw: str | None) -> datetime | None:
+    """Parse an optional ISO-8601 timestamp; naive inputs assumed UTC. 422 on bad."""
+    if raw is None:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid before timestamp: {raw!r}") from exc
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 app = create_app()
