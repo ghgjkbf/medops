@@ -9,6 +9,8 @@ const routes = [
   { path: '/maintenance', component: () => import('../views/MaintenanceView.vue') },
   { path: '/mcp-servers', component: () => import('../views/McpServersView.vue') },
   { path: '/chat', component: () => import('../views/ChatView.vue') },
+  { path: '/cleanup', component: () => import('../views/CleanupView.vue') },
+  { path: '/help', component: () => import('../views/HelpView.vue') },
 ]
 
 export default createRouter({ history: createWebHistory(), routes })

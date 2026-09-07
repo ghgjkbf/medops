@@ -14,6 +14,8 @@
         <el-menu-item index="/maintenance">维保管理</el-menu-item>
         <el-menu-item index="/mcp-servers">MCP 服务</el-menu-item>
         <el-menu-item index="/chat">智能问答</el-menu-item>
+        <el-menu-item index="/cleanup">数据清理</el-menu-item>
+        <el-menu-item index="/help">使用说明</el-menu-item>
       </el-menu>
     </el-aside>
     <el-main><router-view /></el-main>
