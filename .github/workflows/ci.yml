@@ -32,6 +32,20 @@ jobs:
   test:
     name: pytest + coverage gate
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medops
+          POSTGRES_PASSWORD: medops
+          POSTGRES_DB: medops
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U medops"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
