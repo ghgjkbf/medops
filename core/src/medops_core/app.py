@@ -59,12 +59,14 @@ from medops_core.models import (
     DeviceMetric,
     MaintenancePlan,
     MaintenanceRecord,
+    McpServer,
     WorkOrder,
 )
 from medops_core.schemas import (
     DeviceIn,
     MaintenancePlanIn,
     MaintenanceRecordIn,
+    McpServerIn,
     WorkOrderIn,
     WorkOrderPatch,
 )
@@ -293,10 +295,67 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         await application.state.endpoint_registry.set_enabled(name, False)
         return {"ok": True, "name": name, "enabled": False}
 
+    @application.patch("/api/v1/endpoints/{name}")
+    async def patch_endpoint(name: str, body: EndpointPatch) -> dict:
+        await application.state.endpoint_registry.set_enabled(name, body.enabled)
+        eps = await application.state.endpoint_registry.list_endpoints(enabled_only=False)
+        match = [e for e in eps if e["name"] == name]
+        if not match:
+            raise HTTPException(status_code=404, detail="endpoint not found")
+        match[0]["api_key"] = "***" if match[0]["api_key"] else ""
+        return {"ok": True, "data": match[0]}
+
     @application.post("/api/v1/endpoints/call")
     async def call_endpoint(req: EndpointCallIn) -> dict:
         client: ExternalApiClient = application.state.external_api
         return await client.call(req.endpoint, req.method, req.path, req.json_body)
+
+    # ----------------------------------------------- MCP quick-config (P4b)
+    @application.get("/api/v1/mcp-servers")
+    async def list_mcp_servers() -> dict:
+        return {"ok": True, "data": {"items": application.state.registry.list_status()}}
+
+    @application.post("/api/v1/mcp-servers", status_code=201)
+    async def register_mcp_server(body: McpServerIn) -> dict:
+        # live registry: register + attempt connect (degrades to unavailable)
+        handle = application.state.registry.register(
+            MCPServerConfig(name=body.name, url=body.url)
+        )
+        await handle.connect()
+        # persist via the async db factory (test-swappable), not RegistrySync
+        # (which reads the real DATABASE_URL and would break test isolation).
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(McpServer).where(McpServer.name == body.name))
+            ).first()
+            if row is None:
+                row = McpServer(name=body.name, endpoint=body.url)
+                s.add(row)
+            row.transport = "streamable-http"
+            row.endpoint = body.url
+            row.health = handle.state.value
+            row.tool_list = [{"name": t} for t in handle.tools]
+            row.last_heartbeat = datetime.now(UTC)
+            await s.commit()
+        return {"ok": True, "data": handle.status()}
+
+    @application.delete("/api/v1/mcp-servers/{name}")
+    async def remove_mcp_server(name: str) -> dict:
+        removed = await application.state.registry.remove(name)
+        db_deleted = False
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(McpServer).where(McpServer.name == name))
+            ).first()
+            if row is not None:
+                await s.delete(row)
+                await s.commit()
+                db_deleted = True
+        if not removed and not db_deleted:
+            raise HTTPException(status_code=404, detail="mcp server not found")
+        return {"ok": True, "data": {"deleted": name}}
 
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")
@@ -749,6 +808,10 @@ class EndpointCallIn(BaseModel):
     method: str = "GET"
     path: str = ""
     json_body: dict | None = None
+
+
+class EndpointPatch(BaseModel):
+    enabled: bool
 
 
 def _row_dict(row: Any) -> dict:  # noqa: ANN401 - ORM row -> dict helper

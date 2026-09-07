@@ -3,7 +3,7 @@ dicts wrapped in the {"ok": true, "data": ...} envelope by the routes)."""
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class DeviceIn(BaseModel):
@@ -38,3 +38,15 @@ class MaintenanceRecordIn(BaseModel):
     kind: str = "repair"  # repair | pm
     content: str = Field(min_length=1)
     performed_by: str = ""
+
+
+class McpServerIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    url: str = Field(min_length=1, max_length=255)
+
+    @field_validator("url")
+    @classmethod
+    def _url_scheme(cls, v: str) -> str:
+        if not (v.startswith("http://") or v.startswith("https://")):
+            raise ValueError("url must start with http:// or https://")
+        return v

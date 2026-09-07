@@ -111,6 +111,16 @@ class ServerHandle:
         # mcp-sdk-v2 note §4: dict results arrive as JSON text content.
         return r.structured_content if r.structured_content else json.loads(r.content[0].text)
 
+    async def close(self) -> None:
+        """Release the underlying client (no-op if never connected)."""
+        if self._client is not None:
+            try:
+                await self._client.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                pass
+            self._client = None
+            self.state = ServerState.UNAVAILABLE
+
     def status(self) -> dict[str, Any]:
         return {
             "name": self.config.name,
@@ -147,6 +157,14 @@ class MCPRegistry:
         if name not in self._handles:
             raise KeyError(f"no MCP server registered under name '{name}'")
         return self._handles[name]
+
+    async def remove(self, name: str) -> bool:
+        """Unregister a server and release its client. True if it existed."""
+        handle = self._handles.pop(name, None)
+        if handle is None:
+            return False
+        await handle.close()
+        return True
 
     @property
     def handles(self) -> dict[str, ServerHandle]:
