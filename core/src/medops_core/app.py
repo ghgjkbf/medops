@@ -19,12 +19,14 @@ registry stays empty, scheduler is a no-op.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from medops_common.constants import (
     WORK_ORDER_TRANSITIONS,
@@ -65,6 +67,7 @@ from medops_core.schemas import (
     WorkOrderIn,
     WorkOrderPatch,
 )
+from medops_core.ws import ConnectionManager, WebSocketSink
 
 
 def build_llm() -> LLMClient | FakeLLM:
@@ -98,17 +101,47 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             )
         await app.state.registry.connect_all()
 
-        inspector = InspectorAgent(app.state.llm, app.state.registry, async_session_factory)
+        # alert push chain: inspector -> notifier -> WebSocketSink broadcast
+        ws_sink = WebSocketSink(app.state.ws_manager)
+
+        def _alert_notifier(alerts: list) -> None:  # noqa: ANN001
+            for a in alerts:
+                ws_sink({
+                    "device_id": a.device_id,
+                    "level": a.level,
+                    "kind": getattr(a, "kind", "fault"),
+                    "message": a.message,
+                    "attribution": a.attribution,
+                    "work_order_id": a.work_order_id,
+                })
+
+        inspector = InspectorAgent(
+            app.state.llm, app.state.registry, async_session_factory,
+            notifier=_alert_notifier,
+        )
         app.state.scheduler = InspectionScheduler(inspector, interval_s=inspect_s)
         app.state.scheduler.start()
+        status_task = asyncio.create_task(_status_broadcaster(app))
         try:
             yield
         finally:
+            status_task.cancel()
             app.state.scheduler.stop()
+
+    async def _status_broadcaster(app: FastAPI) -> None:
+        """Push an MCP status summary to dashboard clients every 10s."""
+        while True:
+            await asyncio.sleep(10)
+            if app.state.ws_manager.count:
+                await app.state.ws_manager.broadcast({
+                    "type": "status",
+                    "registry": app.state.registry.list_status(),
+                })
 
     application = FastAPI(title="medops-core", lifespan=lifespan)
     application.state.registry = MCPRegistry()
     application.state.alerting = AlertingEngine()
+    application.state.ws_manager = ConnectionManager()
     application.state.scheduler = None  # built in lifespan
     application.state.inspect_seconds = inspect_s
     application.state.db_factory = async_session_factory  # overridable in tests
@@ -450,6 +483,74 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             if metric_name:
                 items = [i for i in items if i["metric_name"] == metric_name]
             return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    # ------------------------------------------------------ WebSocket (P3-3)
+    @application.websocket("/ws/dashboard")
+    async def ws_dashboard(ws: WebSocket) -> None:
+        manager: ConnectionManager = application.state.ws_manager
+        await manager.connect(ws)
+        try:
+            # immediate status snapshot on join, then keep the socket warm
+            await ws.send_text(json.dumps({
+                "type": "status",
+                "registry": application.state.registry.list_status(),
+            }, ensure_ascii=False, default=str))
+            while True:
+                # client -> server messages are ignored (heartbeat only)
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            await manager.disconnect(ws)
+
+    @application.websocket("/ws/chat/{session_id}")
+    async def ws_chat(ws: WebSocket, session_id: str) -> None:
+        await ws.accept()
+        try:
+            data = json.loads(await ws.receive_text())
+            message = str(data.get("message", "")).strip()
+            if not message:
+                await ws.send_text(json.dumps({"type": "error", "detail": "empty message"}))
+                await ws.close()
+                return
+
+            async def _send(payload: dict) -> None:
+                await ws.send_text(json.dumps(payload, ensure_ascii=False, default=str))
+
+            llm = getattr(application.state, "llm", None) or build_llm()
+            trajectory: list[dict[str, Any]] = []
+            answer: str
+            provider = "rules"
+            if application.state.registry.handles:
+                agent = SecretaryAgent(llm, application.state.registry, session=None)
+                result = await agent.run(message)
+                answer = result.answer
+                trajectory = result.trajectory_dicts()
+                provider = result.provider_used
+            else:
+                answer = rule_based_fallback(message)
+                provider = "rules"
+            for step in trajectory:  # event-style: trace first, answer last
+                await _send({"type": "tool_trace", "step": step})
+            await _send({"type": "answer", "answer": answer, "provider_used": provider})
+
+            # persist (best effort)
+            try:
+                factory = application.state.db_factory
+                async with factory() as s:
+                    chat = ChatSession(session_id=session_id)
+                    s.add(chat)
+                    s.add(ChatMessage(
+                        session_id=session_id, role="user", content=message,
+                    ))
+                    s.add(ChatMessage(
+                        session_id=session_id, role="assistant", content=answer,
+                        tool_trace=trajectory,
+                    ))
+                    await s.commit()
+            except Exception:  # noqa: BLE001 - persistence is best effort
+                pass
+            await ws.close()
+        except WebSocketDisconnect:
+            pass
 
     return application
 

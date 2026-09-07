@@ -83,11 +83,19 @@ def evaluate_metrics(device_id: str, metrics: dict[str, float]) -> list[RuleHit]
 class InspectorAgent(BaseAgent):
     name = "inspector"
 
-    def __init__(self, llm, registry, session_factory, session: Session | None = None) -> None:  # noqa: ANN001
+    def __init__(
+        self,
+        llm,
+        registry,
+        session_factory,
+        session: Session | None = None,
+        notifier=None,  # noqa: ANN001 - Optional[[list[Alert]], None] callback (P3-3)
+    ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
         self._session_factory = session_factory
         self._session = session
+        self._notifier = notifier
 
     async def plan(self, user_input: str) -> str:  # pragma: no cover - not used
         return ""
@@ -139,6 +147,11 @@ class InspectorAgent(BaseAgent):
             result.alerts_created = len(alerts)
             critical = [a for a in alerts if a.level == AlertLevel.CRITICAL.value]
             result.work_orders_created = await self._create_work_orders(critical)
+            if self._notifier is not None and alerts:
+                try:
+                    self._notifier(alerts)
+                except Exception:  # noqa: BLE001 - push must never break inspection
+                    pass
         result.provider_used = getattr(self.llm, "provider_name", "llm")
         return result
 
