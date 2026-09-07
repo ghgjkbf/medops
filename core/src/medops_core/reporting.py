@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
-from medops_core.models import Alert, Device, WorkOrder
+from medops_core.models import Alert, Device, DeviceLog, MaintenanceRecord, WorkOrder
 
 
 async def generate_report(
@@ -118,3 +118,120 @@ async def _polish(llm, markdown: str) -> str:  # noqa: ANN001
         return result.text or markdown
     except Exception:  # noqa: BLE001 - degrade to template
         return markdown
+
+
+_DEVICE_TYPE_WORDS: dict[str, str] = {
+    "呼吸机": "ventilator",
+    "心电": "ecg",
+    "ct": "ct",
+    "dr": "dr",
+}
+
+
+def _resolve_device_scope(question: str | None) -> tuple[str | None, str | None]:
+    """(device_id, device_type) mentioned in a question; both None = all."""
+    if not question:
+        return None, None
+    q = question.lower()
+    import re  # noqa: PLC0415
+
+    m = re.search(r"\b([a-z]+-sim-\d+)\b", q)
+    if m:
+        return m.group(1), None
+    for word, dtype in _DEVICE_TYPE_WORDS.items():
+        if word in q:
+            return None, dtype
+    return None, None
+
+
+async def device_fault_report(
+    session_factory,  # noqa: ANN001 - async_sessionmaker
+    question: str | None = None,
+) -> dict:
+    """Per-device fault report (Agent tool): alerts + warn/error logs +
+    work orders + maintenance records, scoped by the device mentioned in
+    `question` (falls back to all devices). Returns {scope, markdown, ...}.
+    """
+    device_id, device_type = _resolve_device_scope(question)
+    async with session_factory() as s:
+        stmt = select(Device).order_by(Device.device_id)
+        if device_id:
+            stmt = stmt.where(Device.device_id == device_id)
+        elif device_type:
+            stmt = stmt.where(Device.device_type == device_type)
+        devices = (await s.scalars(stmt)).all()
+        if not devices:  # unknown device -> report across all
+            devices = (await s.scalars(select(Device).order_by(Device.device_id))).all()
+        scope = [d.device_id for d in devices]
+
+        alerts = (
+            await s.scalars(
+                select(Alert).order_by(Alert.created_at.desc()).limit(40)
+            )
+        ).all()
+        logs = (
+            await s.scalars(
+                select(DeviceLog)
+                .where(DeviceLog.level.in_(("ERROR", "WARNING")))
+                .order_by(DeviceLog.ts.desc())
+                .limit(40)
+            )
+        ).all()
+        orders = (
+            await s.scalars(
+                select(WorkOrder).order_by(WorkOrder.created_at.desc()).limit(20)
+            )
+        ).all()
+        records = (
+            await s.scalars(
+                select(MaintenanceRecord)
+                .order_by(MaintenanceRecord.performed_at.desc())
+                .limit(20)
+            )
+        ).all()
+
+    lines: list[str] = [
+        f"# 设备故障报告（范围：{', '.join(scope) or '无设备'}）", ""
+    ]
+    n_alerts = n_logs = n_orders = n_records = 0
+    for dev in devices:
+        lines.append(f"## {dev.device_id}（{dev.device_type}，{dev.status}）")
+        dev_alerts = [a for a in alerts if a.device_id == dev.device_id]
+        dev_logs = [log for log in logs if log.device_id == dev.device_id]
+        dev_orders = [o for o in orders if o.device_id == dev.device_id]
+        dev_records = [r for r in records if r.device_id == dev.device_id]
+        n_alerts += len(dev_alerts)
+        n_logs += len(dev_logs)
+        n_orders += len(dev_orders)
+        n_records += len(dev_records)
+        if dev_alerts:
+            lines.append("### 近期告警")
+            for a in dev_alerts[:8]:
+                lines.append(
+                    f"- [{a.level}] {a.created_at:%m-%d %H:%M} {a.message}"
+                    + (f"（工单 #{a.work_order_id}）" if a.work_order_id else "")
+                )
+        if dev_logs:
+            lines.append("### 异常日志")
+            for log in dev_logs[:8]:
+                lines.append(f"- [{log.level}] {log.ts:%m-%d %H:%M} {log.message[:120]}")
+        if dev_orders:
+            lines.append("### 工单")
+            for o in dev_orders[:5]:
+                lines.append(f"- #{o.id} [{o.status}] {o.title}")
+        if dev_records:
+            lines.append("### 维保记录")
+            for r in dev_records[:5]:
+                lines.append(f"- {r.performed_at:%m-%d} {r.content[:100]}")
+        if not (dev_alerts or dev_logs or dev_orders or dev_records):
+            lines.append("- 近期无故障记录")
+        lines.append("")
+
+    return {
+        "scope": scope,
+        "markdown": "\n".join(lines),
+        "alert_count": n_alerts,
+        "log_count": n_logs,
+        "work_order_count": n_orders,
+        "record_count": n_records,
+    }

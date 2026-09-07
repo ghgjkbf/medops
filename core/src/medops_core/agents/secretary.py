@@ -12,15 +12,27 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
+from medops_core import knowledge
 from medops_core.agents.base import BaseAgent, ToolCall
 from medops_core.mcp_client.registry import MCPRegistry
 from medops_core.models import ChatMessage, ChatSession
+from medops_core.reporting import device_fault_report
 
 # Intent rules: (pattern, intent, tool_hint) — first match wins. Rules keep
 # tool selection deterministic; the LLM only phrases the final answer.
+# KB/report rules sit on top: "球管过热怎么处理" must hit knowledge, not the
+# status query for 球管.
 _INTENT_RULES: list[tuple[str, str, str | None]] = [
+    # fault report (before ledger/status rules: "告警报告" -> report)
+    (r"故障报告|设备报告|健康报告|报告", "report", "get_fault_report"),
+    # knowledge base (cause / handling)
+    (
+        r"怎么处理|处理方法|处理步骤|故障原因|什么原因|原因|怎么办|排除|知识",
+        "knowledge", "search_knowledge",
+    ),
     # dr (探测器/发生器 must precede generic 温度)
     (r"探测器|发生器|kV|kv|磁盘|存储|图像噪声|噪声", "status_query", "get_detector_temp"),
     # ct
@@ -79,10 +91,51 @@ def _server_for_tool(tool: str) -> str | None:
 class SecretaryAgent(BaseAgent):
     name = "secretary"
 
-    def __init__(self, llm, registry: MCPRegistry, session=None) -> None:  # noqa: ANN001
+    def __init__(  # noqa: ANN001 - same style as base
+        self, llm, registry: MCPRegistry, session=None, db_factory=None
+    ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
         self._session = session
+        self._db_factory = db_factory
+        if db_factory is not None:
+            # builtin (non-MCP) tools: knowledge retrieval + fault report
+            self.register_tool(
+                "search_knowledge",
+                partial(knowledge.search_documents, db_factory),
+            )
+            self.register_tool(
+                "get_fault_report", partial(device_fault_report, db_factory)
+            )
+
+    async def _run_builtin(self, tool: str, args: dict) -> object | None:
+        """Execute a registered builtin (possibly async) tool with trajectory."""
+        started = time.perf_counter()
+        try:
+            result = self.tools[tool](**args)
+            if inspect.isawaitable(result):
+                result = await result
+            self._trajectory.append(
+                ToolCall(
+                    name=tool,
+                    args=args,
+                    result=result,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            )
+            return result
+        except Exception as exc:  # noqa: BLE001 - tool errors are recorded
+            self._trajectory.append(
+                ToolCall(
+                    name=tool,
+                    args=args,
+                    result=None,
+                    latency_ms=0,
+                    ok=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            )
+            return None
 
     async def plan(self, user_input: str) -> str:  # noqa: C901 - intent dispatch
         intent = classify_intent(user_input)
@@ -125,6 +178,15 @@ class SecretaryAgent(BaseAgent):
                 )
                 tool_payload = None
 
+        builtin_payload: object | None = None
+        if intent.tool and intent.server is None and intent.tool in self.tools:
+            args: dict[str, Any] = (
+                {"query": user_input}
+                if intent.tool == "search_knowledge"
+                else {"question": user_input}
+            )
+            builtin_payload = await self._run_builtin(intent.tool, args)
+
         context_lines: list[str] = []
         if tool_payload:
             for key in ("status", "metrics", "params", "detector_temp", "waveform_snr"):
@@ -132,6 +194,15 @@ class SecretaryAgent(BaseAgent):
                     context_lines.append(f"{key}: {tool_payload[key]}")
             if not context_lines:
                 context_lines.append(str(tool_payload)[:300])
+        if builtin_payload is not None:
+            if intent.tool == "search_knowledge":
+                hits = builtin_payload if isinstance(builtin_payload, list) else []
+                for i, hit in enumerate(hits, 1):
+                    context_lines.append(
+                        f"知识库[{i}] {hit['title']}：{hit['content'][:150]}"
+                    )
+            elif isinstance(builtin_payload, dict):  # fault report
+                context_lines.append(str(builtin_payload.get("markdown", ""))[:800])
 
         system = (
             "你是医疗器械运维助手。基于给定的工具数据用中文简洁回答，"

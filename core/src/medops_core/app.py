@@ -21,13 +21,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from medops_common.constants import (
     WORK_ORDER_TRANSITIONS,
@@ -37,6 +38,7 @@ from medops_common.constants import (
 from pydantic import BaseModel
 from sqlalchemy import delete, select, update
 
+from medops_core import knowledge
 from medops_core.agents.inspector import InspectorAgent
 from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based_fallback
 from medops_core.agents.scheduler import InspectionScheduler
@@ -64,6 +66,7 @@ from medops_core.models import (
 )
 from medops_core.schemas import (
     DeviceIn,
+    KnowledgeIn,
     MaintenancePlanIn,
     MaintenanceRecordIn,
     McpServerIn,
@@ -103,6 +106,16 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 MCPServerConfig(name=row["name"], url=row["url"], timeout_s=5.0)
             )
         await app.state.registry.connect_all()
+
+        # builtin knowledge seed (idempotent; KB optional — never block startup)
+        try:
+            seeded = await knowledge.seed_builtin(async_session_factory)
+            if seeded:
+                logging.getLogger("medops").info(
+                    "knowledge: seeded %d builtin docs", seeded
+                )
+        except Exception:  # noqa: BLE001 - degraded mode
+            logging.getLogger("medops").warning("knowledge seed skipped", exc_info=True)
 
         # alert push chain: inspector -> notifier -> WebSocketSink broadcast
         ws_sink = WebSocketSink(app.state.ws_manager)
@@ -215,7 +228,10 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         answer: str
         provider = "rules"
         if application.state.registry.handles:
-            agent = SecretaryAgent(llm, application.state.registry, session=None)
+            agent = SecretaryAgent(
+                llm, application.state.registry, session=None,
+                db_factory=application.state.db_factory,
+            )
             result = await agent.run(req.message)
             answer = result.answer
             trajectory = result.trajectory_dicts()
@@ -358,6 +374,48 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         if not removed and not db_deleted:
             raise HTTPException(status_code=404, detail="mcp server not found")
         return {"ok": True, "data": {"deleted": name}}
+
+    # ------------------------------------------------- knowledge base (P4c)
+    _KB_MAX_BYTES = 512 * 1024
+
+    @application.get("/api/v1/knowledge")
+    async def knowledge_endpoint(q: str | None = None, limit: int = 8) -> dict:
+        factory = application.state.db_factory
+        if q:
+            items = await knowledge.search_documents(factory, q, limit=limit)
+        else:
+            items = await knowledge.list_documents(factory)
+        return {"ok": True, "data": {"count": len(items), "items": items}}
+
+    @application.post("/api/v1/knowledge", status_code=201)
+    async def knowledge_add(body: KnowledgeIn) -> dict:
+        factory = application.state.db_factory
+        meta: dict[str, Any] = {"source": "manual"}
+        if body.device_type:
+            meta["device_type"] = body.device_type
+        doc_id = await knowledge.add_document(factory, body.title, body.content, meta)
+        return {"ok": True, "data": {"id": doc_id, "title": body.title}}
+
+    @application.post("/api/v1/knowledge/import", status_code=201)
+    async def knowledge_import(file: UploadFile) -> dict:
+        raw = await file.read()
+        if len(raw) > _KB_MAX_BYTES:
+            raise HTTPException(status_code=422, detail="file too large (max 512 KB)")
+        text = raw.decode("utf-8", errors="replace").strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="file is empty")
+        title = file.filename or "imported-doc"
+        doc_id = await knowledge.add_document(
+            application.state.db_factory, title, text,
+            {"source": "upload", "filename": title},
+        )
+        return {"ok": True, "data": {"id": doc_id, "title": title, "chars": len(text)}}
+
+    @application.delete("/api/v1/knowledge/{doc_id}")
+    async def knowledge_delete(doc_id: int) -> dict:
+        if not await knowledge.delete_document(application.state.db_factory, doc_id):
+            raise HTTPException(status_code=404, detail="knowledge doc not found")
+        return {"ok": True, "data": {"deleted": doc_id}}
 
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")
@@ -739,7 +797,10 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             answer: str
             provider = "rules"
             if application.state.registry.handles:
-                agent = SecretaryAgent(llm, application.state.registry, session=None)
+                agent = SecretaryAgent(
+                    llm, application.state.registry, session=None,
+                    db_factory=application.state.db_factory,
+                )
                 result = await agent.run(message)
                 answer = result.answer
                 trajectory = result.trajectory_dicts()

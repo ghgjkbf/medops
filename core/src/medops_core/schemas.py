@@ -50,3 +50,9 @@ class McpServerIn(BaseModel):
         if not (v.startswith("http://") or v.startswith("https://")):
             raise ValueError("url must start with http:// or https://")
         return v
+
+
+class KnowledgeIn(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    content: str = Field(min_length=1)
+    device_type: str | None = None

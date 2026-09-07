@@ -144,6 +144,12 @@ class InspectorAgent(BaseAgent):
 
         if result.anomalies:
             alerts = await self._store_alerts(result.anomalies)
+            try:  # KB suggestion attached to attribution (best effort)
+                from medops_core import knowledge  # noqa: PLC0415
+
+                await knowledge.enrich_alerts(self._session_factory, alerts)
+            except Exception:  # noqa: BLE001 - KB is optional
+                pass
             result.alerts_created = len(alerts)
             critical = [a for a in alerts if a.level == AlertLevel.CRITICAL.value]
             result.work_orders_created = await self._create_work_orders(critical)
