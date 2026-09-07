@@ -28,7 +28,7 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
-**Current status / 当前状态**: management layer complete — **v0.1.0**. Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry health, secretary-agent chat with tool-trace timeline. Backend: resource API (devices/alerts/work-orders/plans/records/logs/metrics + reports), WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding, work-order FSM single-sourced in `medops_common`. 277 tests green, ruff clean, web build green. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh`. / 管理层完成——**v0.1.0**。Web 控制台（Vue3 + Element Plus + ECharts）：总览大盘（实时告警流）、设备台账（指标趋势）、告警中心（一键转工单）、工单看板（状态机校验）、维保管理（到期高亮）、MCP 服务健康、智能问答（工具调用轨迹时间线）。后端：资源 API + 报告 + WebSocket + 周期提醒 + 外部 API 接入；工单状态机单点实现在 medops_common。277 个测试全绿，ruff/构建全绿。一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）。
+**Current status / 当前状态**: management layer complete — **v0.1.0**. Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry health, secretary-agent chat with tool-trace timeline. Backend: resource API (devices/alerts/work-orders/plans/records/logs/metrics + reports), WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding, work-order FSM single-sourced in `medops_common`. 293 tests green, ruff clean, web build green. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh` · `bash scripts/experiment_p3.sh`. Plus: manual delete + bulk data cleanup (work orders / alerts / logs / metrics / devices / chat), and an in-app usage guide page. / 管理层完成——**v0.1.0**（P4a 新增删除与数据清理）。Web 控制台（Vue3 + Element Plus + ECharts）：总览大盘（实时告警流）、设备台账（指标趋势）、告警中心（一键转工单）、工单看板（状态机校验）、维保管理（到期高亮）、MCP 服务健康、智能问答（工具调用轨迹时间线）、数据清理、使用说明。后端：资源 API + 报告 + WebSocket + 周期提醒 + 外部 API 接入 + 删除/批量清理；工单状态机单点实现在 medops_common。293 个测试全绿，ruff/构建全绿。一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）/ `bash scripts/experiment_p3.sh`（全链路模拟实验）。
 
 ## ⚠️ Disclaimer / 免责声明
 
@@ -36,6 +36,28 @@
 medops never connects to real medical devices and must not be used for
 clinical decision-making. / 本项目全部设备数据均为模拟生成，仅用于教学与
 研究。medops 不接入任何真实医疗设备，严禁用于临床决策。**
+
+## User Guide / 使用说明
+
+平台内置**「使用说明」页面**（控制台左侧导航），覆盖快速开始、功能导航、设备接入、巡检告警、工单流程、数据清理与常见问题。
+
+- **一键启动（演示机）**：双击桌面「medops」快捷方式（或 `scripts/start.bat`）——自动拉起 PostgreSQL → 迁移 → 后端 → 浏览器；停止用「medops-停止」（`scripts/stop.bat`）。启动脚本按端口自动清理占用进程，可重复点击。
+- **手动删除**：设备台账 / 告警中心 / 工单管理 / 维保管理 均提供删除按钮（二次确认）；删除设备会级联清理其告警、工单、维保计划/记录、日志与指标。
+- **数据清理**：控制台「数据清理」页按时间范围（7/30/90 天前）批量清理告警/日志/指标，并可清空会话历史。
+
+### Data cleanup API / 数据清理 API
+
+```bash
+curl -X DELETE 'localhost:8123/api/v1/work-orders/14'              # 删除工单（子引用置 NULL）
+curl -X DELETE 'localhost:8123/api/v1/alerts/12'                   # 删除单条告警
+curl -X DELETE 'localhost:8123/api/v1/alerts?level=critical'       # 按级别批量清理
+curl -X DELETE 'localhost:8123/api/v1/alerts?before=2026-08-01T00:00:00'  # 按时间清理
+curl -X DELETE 'localhost:8123/api/v1/logs?before=2026-08-01T00:00:00'    # 清理旧日志
+curl -X DELETE 'localhost:8123/api/v1/metrics?device_id=ct-sim-01' # 按设备清理指标
+curl -X DELETE 'localhost:8123/api/v1/devices/ct-sim-01'           # 删除设备 + 级联清理
+curl -X DELETE 'localhost:8123/api/v1/chat-sessions'               # 清空会话历史
+# 均返回 {"ok": true, "data": {"deleted": <N>}}；单条删除 404 时返回 "not found"
+```
 
 ## External API Onboarding / 外部 API 接入 (P2.5)
 
@@ -155,7 +177,7 @@ curl http://127.0.0.1:8123/api/v1/health
 
 ```bash
 uv run ruff check .   # lint（配置在 ruff.toml）
-uv run pytest         # testpaths=tests，152 个用例应全绿
+uv run pytest         # testpaths=tests，293 个用例应全绿
 ```
 
 ### Built-in scenarios / 内置剧本
