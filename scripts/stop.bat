@@ -2,7 +2,9 @@
 REM medops quick stop — backend, then PostgreSQL
 setlocal
 set "ROOT=%~dp0.."
-set "PGBIN=D:\ai-use\tools\pg16\pgsql\bin"
+REM Portable PostgreSQL bin dir — EDIT for your machine, or set MEDOPS_PGBIN.
+if defined MEDOPS_PGBIN set "PGBIN=%MEDOPS_PGBIN%"
+if not defined PGBIN set "PGBIN=D:\ai-use\tools\pg16\pgsql\bin"
 set "PGDATA=%ROOT%\deploy\pgdata"
 
 echo Stopping backend ...

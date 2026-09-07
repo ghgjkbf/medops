@@ -2,7 +2,7 @@
 
 - 日期：2026-08-31
 - 状态：v1（已经三轮评审确认）
-- 仓库：`C:\Users\Administrator\Desktop\project`
+- 仓库：本仓库根目录（Windows 演示机路径从略）
 
 ---
 

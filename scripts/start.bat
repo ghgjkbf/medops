@@ -7,7 +7,9 @@ setlocal enabledelayedexpansion
 set "ROOT=%~dp0.."
 cd /d "%ROOT%"
 
-set "PGBIN=D:\ai-use\tools\pg16\pgsql\bin"
+REM Portable PostgreSQL bin dir — EDIT for your machine, or set MEDOPS_PGBIN.
+if defined MEDOPS_PGBIN set "PGBIN=%MEDOPS_PGBIN%"
+if not defined PGBIN set "PGBIN=D:\ai-use\tools\pg16\pgsql\bin"
 set "PGDATA=%ROOT%\deploy\pgdata"
 set "PORT=8123"
 

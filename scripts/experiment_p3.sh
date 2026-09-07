@@ -14,8 +14,9 @@ WORK="$(mktemp -d "$LOCALAPPDATA/Temp/medops-exp.XXXXXX" 2>/dev/null || mktemp -
 PIDS=(); cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; rm -rf "$WORK"; }
 trap cleanup EXIT
 
+PGBIN="${PGBIN:-/d/ai-use/tools/pg16/pgsql/bin}"
 echo "== [1/8] prereqs: PostgreSQL + backend =="
-"D:/ai-use/tools/pg16/pgsql/bin/pg_isready.exe" -h 127.0.0.1 -p 55432 > /dev/null
+"$PGBIN/pg_isready.exe" -h 127.0.0.1 -p 55432 > /dev/null
 if ! curl -sf -o /dev/null --max-time 3 http://127.0.0.1:8123/api/v1/health; then
   echo "   backend down -> quick-start it"
   MEDOPS_NO_BROWSER=1 cmd /c "scripts\\start.bat" > /dev/null 2>&1 &

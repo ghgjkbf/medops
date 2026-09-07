@@ -5,6 +5,70 @@ Format: [Keep a Changelog](https://keepachangelog.com/) + SemVer.
 
 ## [Unreleased]
 
+## [0.3.0-p4c] — 2026-09-07
+
+Knowledge base + agent fault tools; ops polish for demo machines.
+
+### Added
+- **Knowledge base**: deterministic Chinese 2-gram scored retrieval
+  (`medops_core.knowledge`); REST (`GET/POST/DELETE /api/v1/knowledge`,
+  `POST /api/v1/knowledge/import` multipart ≤512KB); 11 builtin
+  cause/handling docs (9 fault scenarios + 2 workflow docs) seeded
+  idempotently at startup; web「知识库」page (search / import / delete)
+- **Agent tools**: secretary `search_knowledge` + `get_fault_report`
+  (per-device markdown: alerts / warn-error logs / work orders /
+  maintenance records, scope resolved from the question); inspection
+  attribution enriched with the top knowledge hit
+- **Hidden startup**: `start.bat` launches PostgreSQL + backend with no
+  console windows (PowerShell wrappers); `stop.bat` switches to
+  port-based kill; portable-PG path overridable via `MEDOPS_PGBIN`
+
+### Changed
+- `DELETE /api/v1/endpoints/{name}` now removes the endpoint row
+  (previously disable-only); deleting the last keyed endpoint reverts
+  inbound auth to open mode
+- golden evaluation routing: 怎么处理 / 什么原因 questions route to the
+  knowledge base instead of device status tools
+
+### Fixed
+- `.bat` scripts restored to CRLF (LF broke cmd's multi-line `if` blocks)
+
+## [0.2.0-p4b] — 2026-09-07
+
+Frontend onboarding for external APIs + runtime MCP configuration.
+
+### Added
+- MCP quick-config API: `GET/POST/DELETE /api/v1/mcp-servers` (register /
+  remove at runtime; live registry + `mcp_server` table; offline
+  registration allowed), `MCPRegistry.remove` + `ServerHandle.close`
+- Web「MCP 服务」page: register/remove form, tool list, state mapping fix
+- Web「API 接入」page: external endpoint list, create (bearer/header,
+  kind=llm joins the fallback chain), enable/disable switch, real delete,
+  local X-API-Key unlock for armed inbound auth
+- `PATCH /api/v1/endpoints/{name}` enable toggle
+
+## [0.2.0-p4a] — 2026-09-07
+
+Manual delete + data cleanup + usage docs.
+
+### Added
+- Delete / bulk-cleanup API: work orders (children detached), alerts
+  (single + bulk by device/level/age), logs & metrics (bulk by age),
+  maintenance plans/records, devices (cascade-cleans six child tables),
+  chat history clear; `DELETE` responses report `{deleted: N}`
+- Web delete buttons on work orders / alerts / devices / maintenance
+  (confirm dialogs; device delete warns cascade);「数据清理」bulk-cleanup
+  page; in-app usage-guide page (使用说明)
+- One-command full-chain simulation experiment `scripts/experiment_p3.sh`
+  (fault injection → inspection → alert → work order → WS → chat →
+  report → 30-scenario golden eval)
+- Quick-start launcher `scripts/start.bat` / desktop shortcut
+
+### Fixed
+- WebSocket alert events no longer lost (fire-and-forget `create_task`
+  now holds strong refs); status broadcaster survives per-cycle errors;
+  backend restart kills by port instead of window title
+
 ## [0.1.0] — 2026-09-07
 
 Management layer complete; first public release.
