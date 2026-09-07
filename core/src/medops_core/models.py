@@ -120,6 +120,9 @@ class Alert(Base):
         Enum(*[a.value for a in AlertLevel], name="alert_level", length=16),
         nullable=False,
     )
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="fault"
+    )  # fault | maintenance_due
     message: Mapped[str] = mapped_column(Text, nullable=False)
     attribution: Mapped[str | None] = mapped_column(Text)  # LLM 归因或规则降级摘要
     work_order_id: Mapped[int | None] = mapped_column(
