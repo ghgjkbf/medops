@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { apiGet, apiPost } from '../api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { apiDelete, apiGet, apiPost } from '../api/client'
 
 interface Alert {
   id: number; device_id: string; level: string; kind: string
@@ -37,6 +37,30 @@ async function toWorkOrder(row: Alert) {
   load()
 }
 
+async function remove(row: Alert) {
+  try {
+    await ElMessageBox.confirm(
+      `删除告警 #${row.id}「${row.message}」？`, '删除告警',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/alerts/${row.id}`)
+  ElMessage.success(`告警 #${row.id} 已删除`)
+  load()
+}
+
+async function clearAll() {
+  try {
+    await ElMessageBox.confirm(
+      '清空全部告警（含已解决与未解决）？此操作不可恢复。', '清空告警',
+      { type: 'error', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  const { deleted } = await apiDelete<{ deleted: number }>('/alerts')
+  ElMessage.success(`已清理 ${deleted} 条告警`)
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -48,6 +72,7 @@ onMounted(load)
         <el-option label="warning" value="warning" />
         <el-option label="info" value="info" />
       </el-select>
+      <el-button type="danger" plain @click="clearAll">清空告警</el-button>
     </div>
 
     <el-table :data="rows" size="small" v-loading="loading" class="mt12">
@@ -70,10 +95,11 @@ onMounted(load)
       </el-table-column>
       <el-table-column prop="message" label="内容" show-overflow-tooltip />
       <el-table-column prop="attribution" label="归因" show-overflow-tooltip />
-      <el-table-column label="操作" width="130">
+      <el-table-column label="操作" width="160">
         <template #default="{ row }">
           <el-tag v-if="row.work_order_id" type="success" size="small">工单 #{{ row.work_order_id }}</el-tag>
           <el-button v-else size="small" type="primary" link @click="toWorkOrder(row)">转工单</el-button>
+          <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

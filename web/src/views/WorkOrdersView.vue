@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { apiGet, apiPatch } from '../api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { apiDelete, apiGet, apiPatch } from '../api/client'
 
 interface WorkOrder {
   id: number; device_id: string; title: string; description: string; status: string
@@ -63,6 +63,18 @@ async function transition(order: WorkOrder, next: string) {
   }
 }
 
+async function remove(order: WorkOrder) {
+  try {
+    await ElMessageBox.confirm(
+      `删除工单 #${order.id}「${order.title}」？关联的告警/维保记录将解除绑定（保留）。`,
+      '删除工单', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/work-orders/${order.id}`)
+  ElMessage.success(`工单 #${order.id} 已删除`)
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -93,6 +105,7 @@ onMounted(load)
               {{ STATUS_LABEL[next] }}
             </el-button>
             <el-tag v-if="!legalNext(o.status).length" type="info" size="small">终态</el-tag>
+            <el-button size="small" type="danger" plain @click="remove(o)">删除</el-button>
           </div>
         </el-card>
       </el-card>

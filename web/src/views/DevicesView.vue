@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
-import { apiGet } from '../api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { apiDelete, apiGet } from '../api/client'
 
 interface Device {
   device_id: string; device_type: string; model: string; department: string; status: string
@@ -57,6 +58,18 @@ async function refreshMetrics() {
   if (detail.value) drawMetrics(detail.value.device_id)
 }
 
+async function remove(row: Device) {
+  try {
+    await ElMessageBox.confirm(
+      `删除设备 ${row.device_id}？将同时删除其告警、工单、维保计划/记录、日志与指标数据，且不可恢复。`,
+      '删除设备', { type: 'error', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/devices/${row.device_id}`)
+  ElMessage.success(`设备 ${row.device_id} 及其关联数据已删除`)
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -80,6 +93,11 @@ onMounted(load)
         <el-table-column prop="status" label="状态">
           <template #default="{ row }">
             <el-tag :type="statusType[row.status] || 'info'" size="small">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button size="small" type="danger" link @click.stop="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

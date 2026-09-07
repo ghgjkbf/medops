@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { apiGet, apiPost } from '../api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { apiDelete, apiGet, apiPost } from '../api/client'
 
 interface Plan {
   id: number; device_id: string; name: string; interval_days: number
@@ -48,6 +48,30 @@ async function addRecord() {
   load()
 }
 
+async function removePlan(plan: Plan) {
+  try {
+    await ElMessageBox.confirm(
+      `删除维保计划「${plan.name}」（设备 ${plan.device_id}）？`, '删除计划',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/maintenance-plans/${plan.id}`)
+  ElMessage.success('计划已删除')
+  load()
+}
+
+async function removeRecord(rec: Record_) {
+  try {
+    await ElMessageBox.confirm(
+      `删除维保记录 #${rec.id}（${rec.device_id}）？`, '删除记录',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  await apiDelete(`/maintenance-records/${rec.id}`)
+  ElMessage.success('记录已删除')
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -80,6 +104,11 @@ onMounted(load)
                 <el-tag v-else type="success" size="small">正常</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" link @click="removePlan(row)">删除</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-col>
@@ -105,6 +134,11 @@ onMounted(load)
               </template>
             </el-table-column>
             <el-table-column prop="content" label="内容" show-overflow-tooltip />
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" link @click="removeRecord(row)">删除</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-col>

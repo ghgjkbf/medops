@@ -40,6 +40,11 @@ export async function apiPatch<T = any>(path: string, body?: object): Promise<T>
   return r.data.data as T
 }
 
+export async function apiDelete<T = any>(path: string, params?: object): Promise<T> {
+  const r = await http.delete(path, { params })
+  return r.data.data as T
+}
+
 /** Dashboard WebSocket with auto-reconnect (design §9 layer 4). */
 export function connectDashboard(onMessage: (msg: any) => void): () => void {
   let ws: WebSocket | null = null
