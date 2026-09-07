@@ -54,10 +54,22 @@ jobs:
       - name: Coverage gate (common + engine >= 80%)
         run: uv run coverage report --fail-under=80
 
-  build-placeholder:
-    name: core/web build (placeholder)
+  web-build:
+    name: web build (vite)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Placeholder
-        run: echo "core/web build jobs will be added in a later phase"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Type-check + build
+        working-directory: web
+        run: npm run build

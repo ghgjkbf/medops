@@ -1,0 +1,1 @@
+{"root":["./src/main.ts","./src/vite-env.d.ts","./src/api/client.ts","./src/router/index.ts","./src/app.vue","./src/views/alertsview.vue","./src/views/chatview.vue","./src/views/dashboardview.vue","./src/views/devicesview.vue","./src/views/maintenanceview.vue","./src/views/mcpserversview.vue","./src/views/workordersview.vue"],"version":"5.9.3"}

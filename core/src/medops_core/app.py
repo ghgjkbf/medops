@@ -24,10 +24,11 @@ import json
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from medops_common.constants import (
     WORK_ORDER_TRANSITIONS,
     WorkOrderStatus,
@@ -561,6 +562,21 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             await ws.close()
         except WebSocketDisconnect:
             pass
+
+    # ------------------------------------------------- static frontend (P3-5)
+    # Production single-process mode: serve web/dist if it has been built.
+    # API routes are registered above so they take precedence. Client-side
+    # routes (/devices, /alerts, ...) need an explicit SPA fallback because
+    # StaticFiles(html=True) only covers the index itself.
+    _dist = Path(__file__).resolve().parents[3] / "web" / "dist"
+    if _dist.is_dir():
+
+        @application.get("/{spa_path:path}", include_in_schema=False)
+        async def spa_fallback(spa_path: str) -> FileResponse:
+            full = _dist / spa_path
+            if spa_path and full.is_file():
+                return FileResponse(full)
+            return FileResponse(_dist / "index.html")
 
     return application
 
