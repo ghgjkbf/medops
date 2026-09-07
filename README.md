@@ -28,7 +28,7 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
-**Current status / 当前状态**: management layer complete — **v0.1.0**. Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry health, secretary-agent chat with tool-trace timeline. Backend: resource API (devices/alerts/work-orders/plans/records/logs/metrics + reports), WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding, work-order FSM single-sourced in `medops_common`. 293 tests green, ruff clean, web build green. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh` · `bash scripts/experiment_p3.sh`. Plus: manual delete + bulk data cleanup (work orders / alerts / logs / metrics / devices / chat), and an in-app usage guide page. / 管理层完成——**v0.1.0**（P4a 新增删除与数据清理）。Web 控制台（Vue3 + Element Plus + ECharts）：总览大盘（实时告警流）、设备台账（指标趋势）、告警中心（一键转工单）、工单看板（状态机校验）、维保管理（到期高亮）、MCP 服务健康、智能问答（工具调用轨迹时间线）、数据清理、使用说明。后端：资源 API + 报告 + WebSocket + 周期提醒 + 外部 API 接入 + 删除/批量清理；工单状态机单点实现在 medops_common。293 个测试全绿，ruff/构建全绿。一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）/ `bash scripts/experiment_p3.sh`（全链路模拟实验）。
+**Current status / 当前状态**: management layer complete — **v0.1.0**. Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry health, secretary-agent chat with tool-trace timeline. Backend: resource API (devices/alerts/work-orders/plans/records/logs/metrics + reports), WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding, work-order FSM single-sourced in `medops_common`. 302 tests green, ruff clean, web build green. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh` · `bash scripts/experiment_p3.sh`. Plus: manual delete + bulk data cleanup (work orders / alerts / logs / metrics / devices / chat), and an in-app usage guide page. / 管理层完成——**v0.1.0**（P4a 新增删除与数据清理）。Web 控制台（Vue3 + Element Plus + ECharts）：总览大盘（实时告警流）、设备台账（指标趋势）、告警中心（一键转工单）、工单看板（状态机校验）、维保管理（到期高亮）、MCP 服务健康、智能问答（工具调用轨迹时间线）、数据清理、使用说明。后端：资源 API + 报告 + WebSocket + 周期提醒 + 外部 API 接入 + 删除/批量清理；工单状态机单点实现在 medops_common。302 个测试全绿，ruff/构建全绿。一键演示 `bash scripts/demo_p1.sh`（设备层）/ `bash scripts/demo_p2.sh`（智能层）/ `bash scripts/experiment_p3.sh`（全链路模拟实验）。P4b：MCP Server 运行时快捷配置（`/api/v1/mcp-servers` GET/POST/DELETE + 前端表单）与外部 API 接入管理页（含端点启停与本前端 Key 解锁）。
 
 ## ⚠️ Disclaimer / 免责声明
 
@@ -44,6 +44,8 @@ clinical decision-making. / 本项目全部设备数据均为模拟生成，仅�
 - **一键启动（演示机）**：双击桌面「medops」快捷方式（或 `scripts/start.bat`）——自动拉起 PostgreSQL → 迁移 → 后端 → 浏览器；停止用「medops-停止」（`scripts/stop.bat`）。启动脚本按端口自动清理占用进程，可重复点击。
 - **手动删除**：设备台账 / 告警中心 / 工单管理 / 维保管理 均提供删除按钮（二次确认）；删除设备会级联清理其告警、工单、维保计划/记录、日志与指标。
 - **数据清理**：控制台「数据清理」页按时间范围（7/30/90 天前）批量清理告警/日志/指标，并可清空会话历史。
+- **MCP 快捷配置**：控制台「MCP 服务」页直接注册/移除 MCP Server（填服务名 + 端点 URL 即时生效，离线可注册）。
+- **API 接入**：控制台「API 接入」页管理外部端点（新增/启停/LLM 降级链），并可在页内保存本前端 X-API-Key 以解锁入站鉴权。
 
 ### Data cleanup API / 数据清理 API
 

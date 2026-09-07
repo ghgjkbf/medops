@@ -8,6 +8,7 @@ const routes = [
   { path: '/work-orders', component: () => import('../views/WorkOrdersView.vue') },
   { path: '/maintenance', component: () => import('../views/MaintenanceView.vue') },
   { path: '/mcp-servers', component: () => import('../views/McpServersView.vue') },
+  { path: '/api-endpoints', component: () => import('../views/ExternalApiView.vue') },
   { path: '/chat', component: () => import('../views/ChatView.vue') },
   { path: '/cleanup', component: () => import('../views/CleanupView.vue') },
   { path: '/help', component: () => import('../views/HelpView.vue') },

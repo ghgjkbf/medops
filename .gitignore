@@ -24,6 +24,8 @@ coverage.xml
 
 # PostgreSQL local data (deploy/README-pg.md)
 deploy/pgdata/
+# runtime logs
+deploy/api.log
 
 # SQLite dev database
 *.db

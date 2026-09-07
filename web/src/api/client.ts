@@ -25,6 +25,12 @@ export async function apiGet<T = any>(path: string, params?: object): Promise<T>
   return r.data.data as T
 }
 
+/** Raw GET returning the full response body (for non-{ok,data} endpoints). */
+export async function apiGetRaw<T = any>(path: string, params?: object): Promise<T> {
+  const r = await http.get(path, { params })
+  return r.data as T
+}
+
 export async function apiPost<T = any>(path: string, body?: object): Promise<T> {
   const r = await http.post(path, body)
   return r.data.data as T
