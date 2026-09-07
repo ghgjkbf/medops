@@ -26,7 +26,13 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from medops_common.constants import (
+    WORK_ORDER_TRANSITIONS,
+    WorkOrderStatus,
+    can_transition_work_order,
+)
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from medops_core.agents.inspector import InspectorAgent
 from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based_fallback
@@ -41,7 +47,24 @@ from medops_core.api_registry import (
 from medops_core.db import async_session_factory
 from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
 from medops_core.mcp_client.sync import RegistrySync
-from medops_core.models import ChatMessage, ChatSession
+from medops_core.models import (
+    Alert,
+    ChatMessage,
+    ChatSession,
+    Device,
+    DeviceLog,
+    DeviceMetric,
+    MaintenancePlan,
+    MaintenanceRecord,
+    WorkOrder,
+)
+from medops_core.schemas import (
+    DeviceIn,
+    MaintenancePlanIn,
+    MaintenanceRecordIn,
+    WorkOrderIn,
+    WorkOrderPatch,
+)
 
 
 def build_llm() -> LLMClient | FakeLLM:
@@ -88,6 +111,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     application.state.alerting = AlertingEngine()
     application.state.scheduler = None  # built in lifespan
     application.state.inspect_seconds = inspect_s
+    application.state.db_factory = async_session_factory  # overridable in tests
     application.state.endpoint_registry = EndpointRegistry(async_session_factory)
     application.state.external_api = ExternalApiClient(application.state.endpoint_registry)
 
@@ -234,6 +258,199 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         client: ExternalApiClient = application.state.external_api
         return await client.call(req.endpoint, req.method, req.path, req.json_body)
 
+    # ------------------------------------------------- resource API (P3-1)
+    @application.get("/api/v1/devices")
+    async def list_devices(
+        page: int = 1, page_size: int = 20,
+        device_type: str | None = None, status: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (await s.scalars(select(Device))).all()
+            items = [_row_dict(r) for r in rows]
+            if device_type:
+                items = [i for i in items if i["device_type"] == device_type]
+            if status:
+                items = [i for i in items if i["status"] == status]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.post("/api/v1/devices", status_code=201)
+    async def create_device(body: DeviceIn) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            exists = (
+                await s.scalars(
+                    select(Device).where(Device.device_id == body.device_id)
+                )
+            ).first()
+            if exists is not None:
+                raise HTTPException(status_code=409, detail="device_id already exists")
+            s.add(Device(**body.model_dump()))
+            await s.commit()
+        return {"ok": True, "data": body.model_dump()}
+
+    @application.get("/api/v1/devices/{device_id}")
+    async def get_device(device_id: str) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(
+                    select(Device).where(Device.device_id == device_id)
+                )
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="device not found")
+            return {"ok": True, "data": _row_dict(row)}
+
+    @application.get("/api/v1/alerts")
+    async def list_alerts(
+        page: int = 1, page_size: int = 20,
+        device_id: str | None = None, level: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (await s.scalars(select(Alert).order_by(Alert.created_at.desc()))).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            if level:
+                items = [i for i in items if i["level"] == level]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.get("/api/v1/work-orders")
+    async def list_work_orders(
+        page: int = 1, page_size: int = 20,
+        device_id: str | None = None, status: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (await s.scalars(select(WorkOrder).order_by(WorkOrder.created_at.desc()))).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            if status:
+                items = [i for i in items if i["status"] == status]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.post("/api/v1/work-orders", status_code=201)
+    async def create_work_order(body: WorkOrderIn) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = WorkOrder(**body.model_dump(), status=WorkOrderStatus.PENDING.value)
+            s.add(row)
+            await s.commit()
+            return {"ok": True, "data": _row_dict(row)}
+
+    @application.patch("/api/v1/work-orders/{work_order_id}")
+    async def patch_work_order(work_order_id: int, body: WorkOrderPatch) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (
+                await s.scalars(select(WorkOrder).where(WorkOrder.id == work_order_id))
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="work order not found")
+            if body.status is not None and body.status != row.status:
+                if body.status not in WORK_ORDER_TRANSITIONS:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"unknown status {body.status!r}",
+                    )
+                if not can_transition_work_order(row.status, body.status):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"illegal transition {row.status!r} -> {body.status!r}"
+                        ),
+                    )
+                row.status = body.status
+            if body.title is not None:
+                row.title = body.title
+            if body.description is not None:
+                row.description = body.description
+            await s.commit()
+            return {"ok": True, "data": _row_dict(row)}
+
+    @application.get("/api/v1/maintenance-plans")
+    async def list_maintenance_plans(
+        page: int = 1, page_size: int = 20, device_id: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (await s.scalars(select(MaintenancePlan))).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.post("/api/v1/maintenance-plans", status_code=201)
+    async def create_maintenance_plan(body: MaintenancePlanIn) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = MaintenancePlan(**body.model_dump())
+            s.add(row)
+            await s.commit()
+            return {"ok": True, "data": _row_dict(row)}
+
+    @application.get("/api/v1/maintenance-records")
+    async def list_maintenance_records(
+        page: int = 1, page_size: int = 20, device_id: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (
+                await s.scalars(
+                    select(MaintenanceRecord).order_by(MaintenanceRecord.performed_at.desc())
+                )
+            ).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.post("/api/v1/maintenance-records", status_code=201)
+    async def create_maintenance_record(body: MaintenanceRecordIn) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = MaintenanceRecord(**body.model_dump())
+            s.add(row)
+            await s.commit()
+            return {"ok": True, "data": _row_dict(row)}
+
+    @application.get("/api/v1/logs")
+    async def list_logs(
+        page: int = 1, page_size: int = 50,
+        device_id: str | None = None, level: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (
+                await s.scalars(select(DeviceLog).order_by(DeviceLog.ts.desc()))
+            ).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            if level:
+                items = [i for i in items if i["level"] == level]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.get("/api/v1/metrics")
+    async def list_metrics(
+        page: int = 1, page_size: int = 200,
+        device_id: str | None = None, metric_name: str | None = None,
+    ) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (
+                await s.scalars(select(DeviceMetric).order_by(DeviceMetric.ts.desc()))
+            ).all()
+            items = [_row_dict(r) for r in rows]
+            if device_id:
+                items = [i for i in items if i["device_id"] == device_id]
+            if metric_name:
+                items = [i for i in items if i["metric_name"] == metric_name]
+            return {"ok": True, "data": _paginate(items, page, page_size)}
+
     return application
 
 
@@ -258,6 +475,17 @@ class EndpointCallIn(BaseModel):
     method: str = "GET"
     path: str = ""
     json_body: dict | None = None
+
+
+def _row_dict(row: Any) -> dict:  # noqa: ANN401 - ORM row -> dict helper
+    return {c.name: getattr(row, c.name) for c in row.__table__.columns}
+
+
+def _paginate(items: list[dict], page: int, page_size: int) -> dict:
+    total = len(items)
+    start = (page - 1) * page_size
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": items[start:start + page_size]}
 
 
 app = create_app()

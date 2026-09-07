@@ -18,7 +18,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from mcp_fw import MedopsMCPServer
-from medops_common.constants import ActionRisk, WorkOrderStatus
+from medops_common.constants import (
+    WORK_ORDER_TRANSITIONS,
+    ActionRisk,
+)
 from medops_core.db import get_database_url
 from medops_core.models import (
     Alert,
@@ -31,14 +34,6 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 SERVER_NAME = "medops-maintenance-db"
-
-# Legal transitions of the work-order state machine (design §6).
-_WORK_ORDER_TRANSITIONS: dict[str, set[str]] = {
-    WorkOrderStatus.PENDING.value: {WorkOrderStatus.IN_PROGRESS.value},
-    WorkOrderStatus.IN_PROGRESS.value: {WorkOrderStatus.AWAITING_VERIFICATION.value},
-    WorkOrderStatus.AWAITING_VERIFICATION.value: {WorkOrderStatus.CLOSED.value},
-    WorkOrderStatus.CLOSED.value: set(),
-}
 
 # Action risk per mutating tool (design §5.1 action grading).
 TOOL_RISKS: dict[str, str] = {
@@ -172,11 +167,11 @@ class MaintenanceDbServer(MedopsMCPServer):
 
     def update_work_order(self, work_order_id: int, new_status: str) -> dict:
         """Transition a work order (HIGH_RISK_WRITE). Illegal transitions rejected."""
-        if new_status not in _WORK_ORDER_TRANSITIONS:
+        if new_status not in WORK_ORDER_TRANSITIONS:
             return {
                 "updated": False,
                 "error": f"unknown status {new_status!r}",
-                "legal": sorted(_WORK_ORDER_TRANSITIONS),
+                "legal": sorted(WORK_ORDER_TRANSITIONS),
                 **self._risk("update_work_order"),
             }
         with self._session_factory() as s:
@@ -187,7 +182,7 @@ class MaintenanceDbServer(MedopsMCPServer):
                     "error": f"work order {work_order_id} not found",
                     **self._risk("update_work_order"),
                 }
-            legal = _WORK_ORDER_TRANSITIONS[order.status]
+            legal = WORK_ORDER_TRANSITIONS[order.status]
             if new_status not in legal:
                 return {
                     "updated": False,

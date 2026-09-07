@@ -38,3 +38,19 @@ class ActionRisk(StrEnum):
     READ_ONLY = "read_only"  # 只读查询
     LOW_RISK_WRITE = "low_risk_write"  # 低风险写
     HIGH_RISK_WRITE = "high_risk_write"  # 高风险写
+
+
+# Legal transitions of the work-order state machine (design §6).
+# Single source of truth: REST API (core) and the maintenance-db MCP server
+# both validate against this table.
+WORK_ORDER_TRANSITIONS: dict[str, set[str]] = {
+    WorkOrderStatus.PENDING.value: {WorkOrderStatus.IN_PROGRESS.value},
+    WorkOrderStatus.IN_PROGRESS.value: {WorkOrderStatus.AWAITING_VERIFICATION.value},
+    WorkOrderStatus.AWAITING_VERIFICATION.value: {WorkOrderStatus.CLOSED.value},
+    WorkOrderStatus.CLOSED.value: set(),
+}
+
+
+def can_transition_work_order(current: str, new: str) -> bool:
+    """True only for a legal state-machine transition between known statuses."""
+    return new in WORK_ORDER_TRANSITIONS.get(current, set())

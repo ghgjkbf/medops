@@ -1,0 +1,40 @@
+"""Pydantic request schemas for the P3-1 resource API (responses are plain
+dicts wrapped in the {"ok": true, "data": ...} envelope by the routes)."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class DeviceIn(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+    device_type: str = Field(min_length=1, max_length=32)
+    model: str = ""
+    department: str = ""
+    status: str = "online"
+
+
+class WorkOrderIn(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=255)
+    description: str = ""
+
+
+class WorkOrderPatch(BaseModel):
+    status: str | None = None
+    title: str | None = None
+    description: str | None = None
+
+
+class MaintenancePlanIn(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=128)
+    interval_days: int = Field(ge=1)
+
+
+class MaintenanceRecordIn(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+    work_order_id: int | None = None
+    kind: str = "repair"  # repair | pm
+    content: str = Field(min_length=1)
+    performed_by: str = ""
