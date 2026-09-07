@@ -484,6 +484,16 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 items = [i for i in items if i["metric_name"] == metric_name]
             return {"ok": True, "data": _paginate(items, page, page_size)}
 
+    @application.post("/api/v1/reports/generate")
+    async def generate_report_endpoint(hours: int = 24) -> dict:
+        from medops_core.reporting import generate_report  # noqa: PLC0415
+
+        if not 1 <= hours <= 24 * 30:
+            raise HTTPException(status_code=422, detail="hours must be 1..720")
+        llm = getattr(application.state, "llm", None)
+        data = await generate_report(application.state.db_factory, hours, llm=llm)
+        return {"ok": True, "data": data}
+
     # ------------------------------------------------------ WebSocket (P3-3)
     @application.websocket("/ws/dashboard")
     async def ws_dashboard(ws: WebSocket) -> None:
