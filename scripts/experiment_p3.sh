@@ -11,8 +11,14 @@ cd "$REPO"
 export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://medops:medops@127.0.0.1:55432/medops}"
 export MEDOPS_LLM_MODE="${MEDOPS_LLM_MODE:-fake}"
 WORK="$(mktemp -d "$LOCALAPPDATA/Temp/medops-exp.XXXXXX" 2>/dev/null || mktemp -d)"
-PIDS=(); cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; rm -rf "$WORK"; }
+PIDS=(); cleanup() { for p in "${PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done; rm -rf "$WORK";
+  # MSYS kill cannot stop native Windows children reliably — sweep by port + cmdline
+  powershell -NoProfile -Command "foreach (\$port in 8801,8803,8805) { Get-NetTCPConnection -LocalPort \$port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue } }; Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -match 'mcp_ct|mcp_ventilator|mcp_maintenance_db|medops_sim' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1 || true; }
 trap cleanup EXIT
+
+echo "== [0/8] sweep leftover sim/MCP processes from previous runs =="
+powershell -NoProfile -Command "foreach (\$port in 8801,8803,8805) { Get-NetTCPConnection -LocalPort \$port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue } }; Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -match 'mcp_ct|mcp_ventilator|mcp_maintenance_db|medops_sim' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }" > /dev/null 2>&1 || true
+sleep 1
 
 PGBIN="${PGBIN:-/d/ai-use/tools/pg16/pgsql/bin}"
 echo "== [1/8] prereqs: PostgreSQL + backend =="
@@ -50,14 +56,23 @@ for name, port in (("ct", 8801), ("ventilator", 8803), ("maintenance-db", 8805))
 
 async def main():
     await reg.connect_all()
+    # TCP-ready != MCP-protocol-ready: retry connects until healthy (~30s cap)
+    for _attempt in range(15):
+        unhealthy = [h for h in reg._handles.values() if h.state.value != "healthy"]
+        if not unhealthy:
+            break
+        for h in unhealthy:
+            try:
+                await h.connect()
+            except Exception:  # noqa: BLE001, S110 - retry next round
+                pass
+        await asyncio.sleep(1.0)
     sync = RegistrySync()
     for h in reg._handles.values():
-        if h.state.value != "healthy":  # connect may lose the race with server boot
-            await asyncio.sleep(1.5)
-            await h.connect()
         tools = list(h.tools)
         if not tools:
             print(f"   WARNING {h.config.name}: no tools (state={h.state.value})")
+            print(f"   DEBUG {h.config.name} last_error: {str(h.last_error)[:400]}")
         sync.upsert_server(h.config.name, h.config.url, h.state.value, tools)
         print(f"   {h.config.name}: {len(tools)} tools, health={h.state.value}")
 
@@ -156,6 +171,20 @@ print(f"   report: {len(md)} chars, head: {md[:100].strip()!r}")
 EOF
 echo "   WS events captured: $(wc -l < "$WORK/ws_events.jsonl" 2>/dev/null || echo 0)"
 grep -o '"type": *"[a-z_]*"' "$WORK/ws_events.jsonl" 2>/dev/null | sort | uniq -c | sed 's/^/   ws: /' || true
+
+echo "== [7.5/8] butler (P5a): LOW task + HIGH two-phase confirmation =="
+printf '{"task":"立即巡检"}' > "$WORK/b1.json"
+BUTLER=$(curl -s -X POST localhost:8123/api/v1/butler/task -H 'Content-Type: application/json' --data-binary @"$WORK/b1.json")
+echo "   butler LOW: $(echo "$BUTLER" | head -c 160)"
+printf '{"task":"清理 365 天前的日志"}' > "$WORK/b2.json"
+PEND=$(curl -s -X POST localhost:8123/api/v1/butler/task -H 'Content-Type: application/json' --data-binary @"$WORK/b2.json")
+TOKEN=$(echo "$PEND" | python -c "import sys,json;print(json.load(sys.stdin)['data'].get('token',''))")
+echo "   butler HIGH staged: token=$TOKEN"
+printf '{"task":"清理 365 天前的日志","confirm_token":"%s"}' "$TOKEN" > "$WORK/b3.json"
+CONF=$(curl -s -X POST localhost:8123/api/v1/butler/task -H 'Content-Type: application/json' --data-binary @"$WORK/b3.json")
+echo "   butler confirmed: $(echo "$CONF" | head -c 160)"
+AUDIT_N=$(curl -s localhost:8123/api/v1/butler/audit | python -c "import sys,json;print(json.load(sys.stdin)['data']['count'])")
+echo "   butler audit rows: $AUDIT_N"
 
 echo "== [8/8] golden evaluation suite (30 scenarios) =="
 uv run python tests/eval/run_eval.py --fake 2>&1 | tail -8

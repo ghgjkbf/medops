@@ -879,8 +879,13 @@ name = "medops"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "mcp-ct" },
     { name = "mcp-device-status" },
+    { name = "mcp-dr" },
+    { name = "mcp-ecg" },
     { name = "mcp-fw" },
+    { name = "mcp-maintenance-db" },
+    { name = "mcp-ventilator" },
     { name = "medops-common" },
     { name = "medops-core" },
     { name = "medops-engine" },
@@ -898,8 +903,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "mcp-ct", editable = "mcp_servers/ct" },
     { name = "mcp-device-status", editable = "mcp_servers/device_status" },
+    { name = "mcp-dr", editable = "mcp_servers/dr" },
+    { name = "mcp-ecg", editable = "mcp_servers/ecg" },
     { name = "mcp-fw", editable = "mcp_servers/framework" },
+    { name = "mcp-maintenance-db", editable = "mcp_servers/maintenance_db" },
+    { name = "mcp-ventilator", editable = "mcp_servers/ventilator" },
     { name = "medops-common", editable = "common" },
     { name = "medops-core", editable = "core" },
     { name = "medops-engine", editable = "devices/engine" },

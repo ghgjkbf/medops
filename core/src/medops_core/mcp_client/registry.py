@@ -34,6 +34,16 @@ class MCPServerConfig(BaseModel):
 ClientFactory = Callable[[MCPServerConfig], Any]
 
 
+def _leaf_errors(exc: BaseException) -> list[str]:
+    """Unwrap ExceptionGroup leaves — anyio TaskGroups bury the real error."""
+    if isinstance(exc, BaseExceptionGroup):
+        out: list[str] = []
+        for sub in exc.exceptions:
+            out.extend(_leaf_errors(sub))
+        return out
+    return [f"{type(exc).__name__}: {exc}"]
+
+
 class ServerHandle:
     """State machine for one registered MCP server.
 
@@ -76,7 +86,7 @@ class ServerHandle:
             return True
         except Exception as exc:  # noqa: BLE001 - degradation is the contract
             self.state = ServerState.UNAVAILABLE
-            self.last_error = f"{type(exc).__name__}: {exc}"
+            self.last_error = " | ".join(_leaf_errors(exc)) or f"{type(exc).__name__}: {exc}"
             self._client = None
             return False
 

@@ -12,6 +12,11 @@ dependencies = [
     "mcp-fw",
     "medops-core",
     "mcp-device-status",
+    "mcp-ct",
+    "mcp-dr",
+    "mcp-ventilator",
+    "mcp-ecg",
+    "mcp-maintenance-db",
 ]
 
 [tool.uv]
