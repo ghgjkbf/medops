@@ -17,6 +17,14 @@ dependencies = [
     "mcp-ventilator",
     "mcp-ecg",
     "mcp-maintenance-db",
+    "jieba>=0.42.1",
+    "bm25s>=0.3.11",
+    "sqlite-vec>=0.1.9",
+]
+
+[project.optional-dependencies]
+vector = [
+    "fastembed>=0.8.0",
 ]
 
 [tool.uv]

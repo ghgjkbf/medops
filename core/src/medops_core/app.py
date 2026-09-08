@@ -397,7 +397,8 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             items = await knowledge.search_documents(factory, q, limit=limit)
         else:
             items = await knowledge.list_documents(factory)
-        return {"ok": True, "data": {"count": len(items), "items": items}}
+        return {"ok": True, "data": {"count": len(items), "items": items,
+                                     "backend": knowledge.active_backend()}}
 
     @application.post("/api/v1/knowledge", status_code=201)
     async def knowledge_add(body: KnowledgeIn) -> dict:

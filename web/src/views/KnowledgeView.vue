@@ -13,12 +13,14 @@ const docs = ref<Doc[]>([])
 const query = ref('')
 const fileList = ref<UploadUserFile[]>([])
 const loading = ref(false)
+const backend = ref('keyword')
 
 async function load(q?: string) {
   loading.value = true
   try {
-    const body = await apiGet<{ items: Doc[] }>('/knowledge', q ? { q } : {})
+    const body = await apiGet<{ items: Doc[]; backend: string }>('/knowledge', q ? { q } : {})
     docs.value = body.items
+    backend.value = body.backend || 'keyword'
   } finally {
     loading.value = false
   }
@@ -64,7 +66,10 @@ onMounted(() => load())
     <el-card shadow="never">
       <template #header>
         <div class="head">
-          <span>知识库（故障原因与处理方法）</span>
+          <span>
+            知识库（故障原因与处理方法）
+            <el-tag size="small" effect="plain" class="src">检索后端：{{ backend }}</el-tag>
+          </span>
           <el-upload
             :file-list="fileList" :auto-upload="false" :show-file-list="false"
             :on-change="onChange" accept=".txt,.md,.csv,.json"

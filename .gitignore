@@ -26,6 +26,8 @@ coverage.xml
 deploy/pgdata/
 # runtime logs
 deploy/api.log
+# vector index (rebuildable from PG)
+*.vecdb
 
 # SQLite dev database
 *.db

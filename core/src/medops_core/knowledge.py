@@ -13,15 +13,33 @@ demo's Agent can answer 故障原因/怎么处理 out of the box.
 
 from __future__ import annotations
 
+import os
 import re
+import sqlite3
+from pathlib import Path
 from typing import Any
 
+import bm25s
+import jieba
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: F401
 
 from medops_core.models import Alert, KnowledgeDoc
 
+jieba.setLogLevel(60)  # silence the "Building prefix dict" banner
+
 _TITLE_WEIGHT = 3
+
+
+def _tokenize(text: str) -> list[str]:
+    """jieba segmentation + underscore split (tube_temp -> tube, temp)."""
+    terms: list[str] = []
+    for tok in jieba.lcut(text.lower()):
+        for part in tok.split("_"):
+            part = part.strip()
+            if part:
+                terms.append(part)
+    return terms
 
 
 def _terms(query: str) -> list[str]:
@@ -79,9 +97,10 @@ async def list_documents(factory: async_sessionmaker) -> list[dict[str, Any]]:
     return [_row_dict(r) for r in rows]
 
 
-async def search_documents(
+async def _search_legacy(
     factory: async_sessionmaker, query: str, limit: int = 5
 ) -> list[dict[str, Any]]:
+    """Legacy 2-gram word-frequency scoring (kept as a fallback backend)."""
     async with factory() as s:
         rows = (await s.scalars(select(KnowledgeDoc))).all()
     scored = [(score_doc(query, r.title, r.content), r) for r in rows]
@@ -94,6 +113,27 @@ async def search_documents(
     ]
 
 
+async def _search_keyword(
+    factory: async_sessionmaker, query: str, limit: int = 5
+) -> list[dict[str, Any]]:
+    """BM25 backend: jieba terms + bm25s scoring (new default, P5b)."""
+    docs = await list_documents(factory)
+    if not docs:
+        return []
+    corpus = [" ".join(_tokenize(d["title"] + "\n" + d["content"])) for d in docs]
+    retriever = bm25s.BM25()
+    retriever.index(bm25s.tokenize(corpus, stopwords=None))
+    q_tokens = bm25s.tokenize(" ".join(_tokenize(query)), stopwords=None)
+    k = min(limit, len(docs))
+    result, scores = retriever.retrieve(q_tokens, k=k)
+    out: list[dict[str, Any]] = []
+    for idx, sc in zip(result[0], scores[0]):
+        if float(sc) <= 0:  # no overlap -> treat as no hit (legacy parity)
+            continue
+        out.append({**docs[int(idx)], "score": round(float(sc), 3)})
+    return out
+
+
 async def delete_document(factory: async_sessionmaker, doc_id: int) -> bool:
     async with factory() as s:
         row = (await s.scalars(select(KnowledgeDoc).where(KnowledgeDoc.id == doc_id))).first()
@@ -102,6 +142,140 @@ async def delete_document(factory: async_sessionmaker, doc_id: int) -> bool:
         await s.delete(row)
         await s.commit()
         return True
+
+
+# ------------------------------------------------- vector backend (P5b)
+_embedder: Any = None
+
+
+def _vector_available() -> bool:
+    try:
+        import sqlite_vec  # noqa: F401, PLC0415
+
+        return True
+    except ImportError:
+        return False
+
+
+def _vecdb_path() -> Path:
+    return Path(os.environ.get("MEDOPS_KB_VECDB", "deploy/knowledge.vecdb"))
+
+
+def _vec_conn() -> sqlite3.Connection:
+    import sqlite_vec  # noqa: PLC0415
+
+    path = _vecdb_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS vec_docs "
+        "USING vec0(doc_id INTEGER PRIMARY KEY, embedding FLOAT[512])"
+    )
+    return conn
+
+
+def _embed_text(text: str) -> list[float]:
+    """BGE-small-zh-v1.5 (512-d) via fastembed; lazy, optional extra."""
+    global _embedder
+    if _embedder is None:
+        from fastembed import TextEmbedding  # noqa: PLC0415
+
+        _embedder = TextEmbedding("BGE-small-zh-v1.5")
+    return [float(x) for x in next(_embedder.embed([text]))]
+
+
+async def reindex_vector(factory: async_sessionmaker, embed=None) -> int:
+    """Rebuild the whole vector index from PG docs (facts stay in PG)."""
+    docs = await list_documents(factory)
+    embed = embed or _embed_text
+    conn = _vec_conn()
+    conn.execute("DROP TABLE IF EXISTS vec_docs")
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS vec_docs "
+        "USING vec0(doc_id INTEGER PRIMARY KEY, embedding FLOAT[512])"
+    )
+    import sqlite_vec  # noqa: PLC0415
+
+    for d in docs:
+        vec = embed(d["title"] + "\n" + d["content"])
+        conn.execute(
+            "INSERT INTO vec_docs(doc_id, embedding) VALUES (?, ?)",
+            (d["id"], sqlite_vec.serialize_float32(vec)),
+        )
+    conn.commit()
+    conn.close()
+    return len(docs)
+
+
+async def _search_vector(
+    factory: async_sessionmaker, query: str, limit: int = 5
+) -> list[dict[str, Any]]:
+    import sqlite_vec  # noqa: PLC0415
+
+    docs = await list_documents(factory)
+    if not docs:
+        return []
+    conn = _vec_conn()
+    count = conn.execute("SELECT count(*) FROM vec_docs").fetchone()[0]
+    if count != len(docs):  # stale index -> rebuild (demo scale)
+        conn.close()
+        await reindex_vector(factory)
+        conn = _vec_conn()
+    qv = sqlite_vec.serialize_float32(_embed_text(query))
+    rows = conn.execute(
+        "SELECT doc_id, distance FROM vec_docs WHERE embedding MATCH ? AND k = ?",
+        (qv, limit),
+    ).fetchall()
+    by_id = {d["id"]: d for d in docs}
+    out = []
+    for doc_id, dist in rows:
+        d = by_id.get(int(doc_id))
+        if d:
+            out.append({**d, "score": round(1.0 / (1.0 + float(dist)), 3)})
+    conn.close()
+    return out
+
+
+# ------------------------------------------------- unified retrieval entry
+_BACKENDS = {
+    "keyword": _search_keyword,
+    "legacy": _search_legacy,
+    "vector": _search_vector,
+}
+
+
+def active_backend() -> str:
+    """Effective backend for the current environment (UI/report display)."""
+    chosen = os.environ.get("MEDOPS_KB_BACKEND", "keyword")
+    if chosen not in _BACKENDS:
+        return "keyword"
+    if chosen == "vector" and not _vector_available():
+        return "keyword"
+    return chosen
+
+
+async def retrieve(
+    factory: async_sessionmaker, query: str, limit: int = 5, backend: str | None = None
+) -> list[dict[str, Any]]:
+    chosen = backend or os.environ.get("MEDOPS_KB_BACKEND", "keyword")
+    if chosen not in _BACKENDS:
+        chosen = "keyword"
+    if chosen == "vector" and not _vector_available():
+        chosen = "keyword"
+    try:
+        return await _BACKENDS[chosen](factory, query, limit)
+    except Exception:  # noqa: BLE001 - any backend failure degrades to keyword
+        if chosen != "keyword":
+            return await _search_keyword(factory, query, limit)
+        raise
+
+
+async def search_documents(
+    factory: async_sessionmaker, query: str, limit: int = 5
+) -> list[dict[str, Any]]:
+    return await retrieve(factory, query, limit)
 
 
 # ------------------------------------------------------------- builtin seed
