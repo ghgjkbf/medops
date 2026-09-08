@@ -248,6 +248,22 @@ class KnowledgeDoc(Base):
     )
 
 
+class ButlerAudit(Base):
+    """管家操作审计（P5a）：每次执行的管理操作、参数、结果、风险与确认状态。"""
+
+    __tablename__ = "butler_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    tool: Mapped[str] = mapped_column(String(64), nullable=False)
+    args: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
+    risk: Mapped[str] = mapped_column(String(8), nullable=False, default="low")  # low | high
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class ApiEndpoint(Base):
     """外部 API 接入配置（P2.5）。
 

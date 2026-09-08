@@ -90,12 +90,20 @@ class InspectorAgent(BaseAgent):
         session_factory,
         session: Session | None = None,
         notifier=None,  # noqa: ANN001 - Optional[[list[Alert]], None] callback (P3-3)
+        butler=None,  # noqa: ANN001 - ButlerAgent (P5a: inspector doubles as butler)
     ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
         self._session_factory = session_factory
         self._session = session
         self._notifier = notifier
+        self._butler = butler
+
+    async def execute_task(self, task: str, confirm_token: str | None = None) -> dict:
+        """Butler role (P5a): execute a management task (delegated)."""
+        if self._butler is None:
+            raise RuntimeError("butler not enabled")
+        return await self._butler.execute_task(task, confirm_token)
 
     async def plan(self, user_input: str) -> str:  # pragma: no cover - not used
         return ""

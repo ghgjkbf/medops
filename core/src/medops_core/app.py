@@ -39,6 +39,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select, update
 
 from medops_core import knowledge
+from medops_core.agents.butler import ButlerAgent
 from medops_core.agents.inspector import InspectorAgent
 from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based_fallback
 from medops_core.agents.scheduler import InspectionScheduler
@@ -54,6 +55,7 @@ from medops_core.mcp_client.registry import MCPRegistry, MCPServerConfig
 from medops_core.mcp_client.sync import RegistrySync
 from medops_core.models import (
     Alert,
+    ButlerAudit,
     ChatMessage,
     ChatSession,
     Device,
@@ -65,6 +67,7 @@ from medops_core.models import (
     WorkOrder,
 )
 from medops_core.schemas import (
+    ButlerTaskIn,
     DeviceIn,
     KnowledgeIn,
     MaintenancePlanIn,
@@ -137,6 +140,14 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         app.state.scheduler = InspectionScheduler(inspector, interval_s=inspect_s)
         app.state.scheduler.start()
+        # butler (P5a): the inspector doubles as the management agent
+        butler = ButlerAgent(
+            db_factory=async_session_factory,
+            registry=app.state.registry,
+            scheduler=app.state.scheduler,
+        )
+        app.state.butler = butler
+        inspector.butler = butler
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:
             yield
@@ -231,6 +242,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             agent = SecretaryAgent(
                 llm, application.state.registry, session=None,
                 db_factory=application.state.db_factory,
+                butler=application.state.butler,
             )
             result = await agent.run(req.message)
             answer = result.answer
@@ -416,6 +428,31 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         if not await knowledge.delete_document(application.state.db_factory, doc_id):
             raise HTTPException(status_code=404, detail="knowledge doc not found")
         return {"ok": True, "data": {"deleted": doc_id}}
+
+    # ------------------------------------------------------- butler (P5a)
+    @application.post("/api/v1/butler/task")
+    async def butler_task(body: ButlerTaskIn) -> dict:
+        butler = application.state.butler
+        if butler is None:
+            raise HTTPException(status_code=503, detail="butler unavailable")
+        result = await butler.execute_task(body.task, body.confirm_token)
+        return {"ok": True, "data": result}
+
+    @application.get("/api/v1/butler/audit")
+    async def butler_audit_list(limit: int = 50) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (
+                await s.scalars(
+                    select(ButlerAudit).order_by(ButlerAudit.ts.desc()).limit(limit)
+                )
+            ).all()
+        items = [
+            {"id": r.id, "ts": r.ts.isoformat(), "tool": r.tool, "args": r.args,
+             "result": r.result, "risk": r.risk, "confirmed": r.confirmed}
+            for r in rows
+        ]
+        return {"ok": True, "data": {"count": len(items), "items": items}}
 
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")
@@ -800,6 +837,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 agent = SecretaryAgent(
                     llm, application.state.registry, session=None,
                     db_factory=application.state.db_factory,
+                    butler=application.state.butler,
                 )
                 result = await agent.run(message)
                 answer = result.answer

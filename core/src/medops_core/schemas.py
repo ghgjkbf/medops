@@ -56,3 +56,8 @@ class KnowledgeIn(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=1)
     device_type: str | None = None
+
+
+class ButlerTaskIn(BaseModel):
+    task: str = Field(min_length=1)
+    confirm_token: str | None = None

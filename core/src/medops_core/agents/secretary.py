@@ -27,11 +27,18 @@ from medops_core.reporting import device_fault_report
 # status query for 球管.
 _INTENT_RULES: list[tuple[str, str, str | None]] = [
     # fault report (before ledger/status rules: "告警报告" -> report)
-    (r"故障报告|设备报告|健康报告|报告", "report", "get_fault_report"),
+    (r"故障报告|设备报告|健康报告", "report", "get_fault_report"),
     # knowledge base (cause / handling)
     (
         r"怎么处理|处理方法|处理步骤|故障原因|什么原因|原因|怎么办|排除|知识",
         "knowledge", "search_knowledge",
+    ),
+    # butler (management operations): action verbs beat generic ledger nouns
+    (
+        r"(?:把|将)\s*工单|关闭\s*工单|工单\s*#?\s*\d+\s*转|创建工单|新建工单"
+        r"|删除|清理|清空|移除|触发巡检|立即巡检|巡检一次"
+        r"|生成\s*(?:平台\s*)?报告|注册\s*(?:MCP\s*)?服务|停用\s*端点|启用\s*端点",
+        "butler", "butler",
     ),
     # dr (探测器/发生器 must precede generic 温度)
     (r"探测器|发生器|kV|kv|磁盘|存储|图像噪声|噪声", "status_query", "get_detector_temp"),
@@ -92,12 +99,13 @@ class SecretaryAgent(BaseAgent):
     name = "secretary"
 
     def __init__(  # noqa: ANN001 - same style as base
-        self, llm, registry: MCPRegistry, session=None, db_factory=None
+        self, llm, registry: MCPRegistry, session=None, db_factory=None, butler=None
     ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
         self._session = session
         self._db_factory = db_factory
+        self._butler = butler
         if db_factory is not None:
             # builtin (non-MCP) tools: knowledge retrieval + fault report
             self.register_tool(
@@ -187,6 +195,19 @@ class SecretaryAgent(BaseAgent):
             )
             builtin_payload = await self._run_builtin(intent.tool, args)
 
+        butler_result: dict[str, Any] | None = None
+        if intent.name == "butler" and self._butler is not None:
+            started = time.perf_counter()
+            butler_result = await self._butler.execute_task(user_input)
+            self._trajectory.append(
+                ToolCall(
+                    name="butler",
+                    args={"task": user_input},
+                    result=butler_result,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                )
+            )
+
         context_lines: list[str] = []
         if tool_payload:
             for key in ("status", "metrics", "params", "detector_temp", "waveform_snr"):
@@ -203,6 +224,17 @@ class SecretaryAgent(BaseAgent):
                     )
             elif isinstance(builtin_payload, dict):  # fault report
                 context_lines.append(str(builtin_payload.get("markdown", ""))[:800])
+        if isinstance(butler_result, dict):
+            if butler_result.get("status") == "pending_confirmation":
+                context_lines.append(
+                    f"操作待确认：{butler_result.get('preview')}（{butler_result.get('hint')}）"
+                )
+            elif butler_result.get("status") == "executed":
+                r = butler_result.get("result", {})
+                context_lines.append(
+                    f"管家已执行 {butler_result.get('operation')}："
+                    + (r.get("error") or str({k: v for k, v in r.items() if k != "markdown"})[:200])
+                )
 
         system = (
             "你是医疗器械运维助手。基于给定的工具数据用中文简洁回答，"
