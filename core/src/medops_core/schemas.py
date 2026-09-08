@@ -61,3 +61,10 @@ class KnowledgeIn(BaseModel):
 class ButlerTaskIn(BaseModel):
     task: str = Field(min_length=1)
     confirm_token: str | None = None
+
+
+class KnowledgeSourceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    type: str = Field(min_length=1, max_length=16)  # web | rss | vector_store
+    url: str = Field(min_length=1, max_length=512)
+    schedule_minutes: int | None = Field(default=None, ge=5)

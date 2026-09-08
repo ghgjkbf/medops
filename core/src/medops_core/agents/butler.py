@@ -92,6 +92,10 @@ _OPERATIONS: list[_OpSpec] = [
             r"生成\s*(?:平台\s*)?报告|运营报告", "_op_generate_report"),
     _OpSpec("platform_status", "low",
             r"平台状态|服务状态|巡检状态", "_op_platform_status"),
+    _OpSpec("sync_knowledge_source", "low",
+            r"同步知识源\s*[「\"]?([A-Za-z0-9_-]+)", "_op_sync_knowledge_source"),
+    _OpSpec("list_knowledge_sources", "low",
+            r"列出知识源|知识源列表", "_op_list_knowledge_sources"),
 ]
 
 _STATUS_WORDS = {"待接单": "pending", "处理中": "in_progress",
@@ -150,6 +154,8 @@ class ButlerAgent:
         elif op == "register_mcp_server":
             args["name"] = m.group(1)
             args["url"] = m.group(2)
+        elif op == "sync_knowledge_source":
+            args["name"] = m.group(1)
         elif op == "create_work_order":
             dev = re.search(r"\b([a-z]+-sim-\d+)\b", task, re.IGNORECASE)
             args["device_id"] = dev.group(1) if dev else ""
@@ -388,3 +394,20 @@ class ButlerAgent:
                 "alerts": alerts,
                 "mcp_servers": [
                     {"name": h["name"], "state": h["state"]} for h in registry_status]}
+
+    async def _op_sync_knowledge_source(self, name: str) -> dict[str, Any]:
+        from medops_core import sources  # noqa: PLC0415
+
+        rows = await sources.list_sources(self._db_factory)
+        row = next((r for r in rows if r["name"] == name), None)
+        if row is None:
+            return {"ok": False, "error": "knowledge source not found"}
+        return await sources.sync_source(self._db_factory, row["id"])
+
+    async def _op_list_knowledge_sources(self) -> dict[str, Any]:
+        from medops_core import sources  # noqa: PLC0415
+
+        rows = await sources.list_sources(self._db_factory)
+        return {"ok": True, "count": len(rows),
+                "sources": [{"name": r["name"], "type": r["type"],
+                             "status": r["status"]} for r in rows]}

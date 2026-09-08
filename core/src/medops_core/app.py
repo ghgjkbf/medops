@@ -38,7 +38,7 @@ from medops_common.constants import (
 from pydantic import BaseModel
 from sqlalchemy import delete, select, update
 
-from medops_core import knowledge
+from medops_core import knowledge, sources
 from medops_core.agents.butler import ButlerAgent
 from medops_core.agents.inspector import InspectorAgent
 from medops_core.agents.llm import FakeLLM, LLMClient, env_providers, rule_based_fallback
@@ -70,6 +70,7 @@ from medops_core.schemas import (
     ButlerTaskIn,
     DeviceIn,
     KnowledgeIn,
+    KnowledgeSourceIn,
     MaintenancePlanIn,
     MaintenanceRecordIn,
     McpServerIn,
@@ -148,12 +149,28 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         app.state.butler = butler
         inspector.butler = butler
+        sync_task = asyncio.create_task(_source_syncer(app))
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:
             yield
         finally:
             status_task.cancel()
+            sync_task.cancel()
             app.state.scheduler.stop()
+
+    async def _source_syncer(app: FastAPI) -> None:
+        """P5c: periodically sync knowledge sources whose schedule is due."""
+        import logging  # noqa: PLC0415
+
+        log = logging.getLogger("medops")
+        while True:
+            await asyncio.sleep(60)
+            try:
+                results = await sources.sync_due(app.state.db_factory)
+                for r in results:
+                    log.info("knowledge source %s synced: %s", r.get("name"), r.get("added"))
+            except Exception:  # noqa: BLE001 - scheduled sync must never crash the app
+                log.warning("knowledge source sync failed", exc_info=True)
 
     async def _status_broadcaster(app: FastAPI) -> None:
         """Push an MCP status summary to dashboard clients every 10s."""
@@ -454,6 +471,36 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             for r in rows
         ]
         return {"ok": True, "data": {"count": len(items), "items": items}}
+
+    # ---------------------------------------------- knowledge sources (P5c)
+    @application.get("/api/v1/knowledge-sources")
+    async def ks_list() -> dict:
+        rows = await sources.list_sources(application.state.db_factory)
+        return {"ok": True, "data": {"count": len(rows), "items": rows}}
+
+    @application.post("/api/v1/knowledge-sources", status_code=201)
+    async def ks_add(body: KnowledgeSourceIn) -> dict:
+        try:
+            source_id = await sources.add_source(
+                application.state.db_factory,
+                body.name, body.type, body.url, body.schedule_minutes,
+            )
+        except sources.SourceExists as exc:
+            raise HTTPException(status_code=409, detail="source name already exists") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"ok": True, "data": {"id": source_id, "name": body.name}}
+
+    @application.delete("/api/v1/knowledge-sources/{source_id}")
+    async def ks_delete(source_id: int) -> dict:
+        if not await sources.delete_source(application.state.db_factory, source_id):
+            raise HTTPException(status_code=404, detail="knowledge source not found")
+        return {"ok": True, "data": {"deleted": source_id}}
+
+    @application.post("/api/v1/knowledge-sources/{source_id}/sync")
+    async def ks_sync(source_id: int) -> dict:
+        result = await sources.sync_source(application.state.db_factory, source_id)
+        return {"ok": True, "data": result}
 
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")

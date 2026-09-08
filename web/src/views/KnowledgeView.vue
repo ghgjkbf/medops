@@ -2,11 +2,17 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
-import { apiDelete, apiGet, apiUpload } from '../api/client'
+import { apiDelete, apiGet, apiPost, apiUpload } from '../api/client'
 
 interface Doc {
   id: number; title: string; content: string
   meta: Record<string, string>; score?: number
+}
+
+interface KSource {
+  id: number; name: string; type: string; url: string
+  schedule_minutes: number | null; last_synced_at: string | null
+  status: string; meta: Record<string, unknown>
 }
 
 const docs = ref<Doc[]>([])
@@ -14,6 +20,13 @@ const query = ref('')
 const fileList = ref<UploadUserFile[]>([])
 const loading = ref(false)
 const backend = ref('keyword')
+const sources = ref<KSource[]>([])
+const srcForm = ref({ name: '', type: 'web', url: '', schedule_minutes: undefined as number | undefined })
+
+async function loadSources() {
+  const body = await apiGet<{ items: KSource[] }>('/knowledge-sources')
+  sources.value = body.items
+}
 
 async function load(q?: string) {
   loading.value = true
@@ -24,6 +37,39 @@ async function load(q?: string) {
   } finally {
     loading.value = false
   }
+}
+
+async function addSource() {
+  if (!srcForm.value.name || !srcForm.value.url) {
+    ElMessage.warning('名称与 URL 必填')
+    return
+  }
+  try {
+    await apiPost('/knowledge-sources', { ...srcForm.value })
+    ElMessage.success('知识源已绑定')
+    srcForm.value = { name: '', type: 'web', url: '', schedule_minutes: undefined }
+    loadSources()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '绑定失败')
+  }
+}
+
+async function syncSource(row: KSource) {
+  const data = await apiPost<{ ok: boolean; added: number; error?: string }>(
+    `/knowledge-sources/${row.id}/sync`)
+  if (data.ok) ElMessage.success(`已同步，新增 ${data.added} 条`)
+  else ElMessage.error(data.error || '同步失败')
+  loadSources()
+}
+
+async function removeSource(row: KSource) {
+  try {
+    await ElMessageBox.confirm(`解绑知识源「${row.name}」？已导入的文档会保留。`, '解绑知识源',
+      { type: 'warning', confirmButtonText: '解绑', cancelButtonText: '取消' })
+  } catch { return }
+  await apiDelete(`/knowledge-sources/${row.id}`)
+  ElMessage.success('已解绑')
+  loadSources()
 }
 
 async function search() {
@@ -58,7 +104,7 @@ async function onChange(_file: unknown, files: UploadUserFile[]) {
   }
 }
 
-onMounted(() => load())
+onMounted(() => { load(); loadSources() })
 </script>
 
 <template>
@@ -116,6 +162,56 @@ onMounted(() => load())
         class="mt16" type="info" :closable="false"
         title="内置文档覆盖 9 类故障剧本的原因与处理方法，平台启动时自动加载。智能问答与巡检归因会自动检索知识库。"
       />
+    </el-card>
+
+    <el-card shadow="never" class="mt12">
+      <template #header>
+        <div class="head">
+          <span>外部知识源绑定（{{ sources.length }}）</span>
+        </div>
+      </template>
+
+      <div class="reg-form">
+        <el-input v-model="srcForm.name" placeholder="名称" style="width: 140px" />
+        <el-select v-model="srcForm.type" style="width: 130px">
+          <el-option label="网页 web" value="web" />
+          <el-option label="订阅 RSS" value="rss" />
+          <el-option label="向量库文件" value="vector_store" />
+        </el-select>
+        <el-input
+          v-model="srcForm.url" placeholder="URL / 向量库文件路径"
+          style="width: 300px"
+        />
+        <el-button type="primary" @click="addSource">绑定</el-button>
+      </div>
+      <p class="hint">
+        支持网页/RSS 抓取（自动去正文标签、分块、按内容哈希去重）与外部向量库文件导入
+        （sqlite 表 docs(id,title,content)）。禁止内网地址（SSRF 防护）。
+      </p>
+
+      <el-table :data="sources" size="small" class="mt12">
+        <el-table-column prop="name" label="名称" width="140" />
+        <el-table-column prop="type" label="类型" width="110" />
+        <el-table-column prop="url" label="地址" show-overflow-tooltip />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'ok' ? 'success' : row.status === 'error' ? 'danger' : 'info'" size="small">
+              {{ row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="上次同步" width="160">
+          <template #default="{ row }">
+            {{ row.last_synced_at ? new Date(row.last_synced_at).toLocaleString() : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="130">
+          <template #default="{ row }">
+            <el-button size="small" type="primary" link @click="syncSource(row)">立即同步</el-button>
+            <el-button size="small" type="danger" link @click="removeSource(row)">解绑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
   </div>
 </template>

@@ -185,6 +185,33 @@ CONF=$(curl -s -X POST localhost:8123/api/v1/butler/task -H 'Content-Type: appli
 echo "   butler confirmed: $(echo "$CONF" | head -c 160)"
 AUDIT_N=$(curl -s localhost:8123/api/v1/butler/audit | python -c "import sys,json;print(json.load(sys.stdin)['data']['count'])")
 echo "   butler audit rows: $AUDIT_N"
+echo "   knowledge-source demo (vector_store import):"
+uv run python - << 'EOF'
+import json, sqlite3, tempfile, urllib.request
+from pathlib import Path
+db = Path(tempfile.gettempdir()) / "kb-demo.vecdb"
+conn = sqlite3.connect(db)
+conn.execute("DROP TABLE IF EXISTS docs")
+conn.execute("CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT, content TEXT)")
+conn.execute("INSERT INTO docs VALUES (1, '外部维保知识', '呼吸机管路每周检查密封圈并记录。')")
+conn.commit(); conn.close()
+BASE = "http://127.0.0.1:8123/api/v1"
+def call(path, body=None):
+    data = json.dumps(body or {}).encode()
+    req = urllib.request.Request(BASE + path, data=data if body else None,
+                                 headers={"Content-Type": "application/json"},
+                                 method="POST" if body else "GET")
+    return json.load(urllib.request.urlopen(req))
+try:
+    call("/knowledge-sources", {"name": "demo-ext", "type": "vector_store", "url": str(db)})
+except urllib.error.HTTPError as e:
+    if e.code != 409:
+        raise
+items = call("/knowledge-sources")["data"]["items"]
+sid = next(s["id"] for s in items if s["name"] == "demo-ext")
+r = call(f"/knowledge-sources/{sid}/sync")
+print("   ks sync:", {k: r.get(k) for k in ("ok", "added")})
+EOF
 
 echo "== [8/8] golden evaluation suite (30 scenarios) =="
 uv run python tests/eval/run_eval.py --fake 2>&1 | tail -8

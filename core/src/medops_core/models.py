@@ -264,6 +264,21 @@ class ButlerAudit(Base):
     confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class KnowledgeSource(Base):
+    """外部知识源绑定（P5c）：web 页面 / RSS / 外部向量库文件。"""
+
+    __tablename__ = "knowledge_source"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)  # web | rss | vector_store
+    url: Mapped[str] = mapped_column(String(512), nullable=False)
+    schedule_minutes: Mapped[int | None] = mapped_column(Integer)  # None = 手动
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="idle")
+    meta: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
+
+
 class ApiEndpoint(Base):
     """外部 API 接入配置（P2.5）。
 
