@@ -20,11 +20,13 @@ from sqlalchemy.pool import NullPool
 
 @pytest.fixture()
 def factory(db_engine: AsyncEngine) -> async_sessionmaker:
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
     return async_sessionmaker(
-        create_async_engine(str(db_engine.url), poolclass=NullPool),
+        create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        ),
         expire_on_commit=False,
     )
 
@@ -183,7 +185,7 @@ def test_is_due_logic() -> None:
 
 # -------------------------------------------------------------------- REST
 def test_rest_sources_crud_and_sync(db_engine: AsyncEngine, tmp_path) -> None:  # noqa: ANN001
-    sync_engine = sync_create_engine(_sync_url(str(db_engine.url)))
+    sync_engine = sync_create_engine(_sync_url(db_engine.url.render_as_string(hide_password=False)))
     Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
     db = tmp_path / "ext.vecdb"
@@ -194,7 +196,9 @@ def test_rest_sources_crud_and_sync(db_engine: AsyncEngine, tmp_path) -> None:  
     conn.close()
 
     application = create_app()
-    engine = create_async_engine(str(db_engine.url), poolclass=NullPool)
+    engine = create_async_engine(
+            db_engine.url.render_as_string(hide_password=False), poolclass=NullPool
+        )
     application.state.db_factory = async_sessionmaker(engine, expire_on_commit=False)
     application.state.endpoint_registry = _StubRegistry()
     client = TestClient(application)
