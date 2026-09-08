@@ -79,8 +79,9 @@ async def main():
 asyncio.run(main())
 EOF
 echo "   restarting backend to load registry from DB ..."
-cmd /c 'taskkill /FI "WINDOWTITLE eq medops-api*" /T /F' > /dev/null 2>&1 || true
 MEDOPS_NO_BROWSER=1 cmd /c "scripts\\start.bat" > /dev/null 2>&1 &
+# start.bat kills the old backend mid-flight: wait for DOWN, then for UP
+for i in $(seq 1 30); do curl -sf --max-time 2 -o /dev/null http://127.0.0.1:8123/api/v1/health 2>/dev/null || break; sleep 1; done
 for i in $(seq 1 40); do curl -sf -o /dev/null http://127.0.0.1:8123/api/v1/health && break; sleep 1; done
 echo "   backend reloaded"
 
@@ -197,10 +198,10 @@ conn.execute("INSERT INTO docs VALUES (1, '外部维保知识', '呼吸机管路
 conn.commit(); conn.close()
 BASE = "http://127.0.0.1:8123/api/v1"
 def call(path, body=None):
-    data = json.dumps(body or {}).encode()
-    req = urllib.request.Request(BASE + path, data=data if body else None,
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(BASE + path, data=data,
                                  headers={"Content-Type": "application/json"},
-                                 method="POST" if body else "GET")
+                                 method="POST" if body is not None else "GET")
     return json.load(urllib.request.urlopen(req))
 try:
     call("/knowledge-sources", {"name": "demo-ext", "type": "vector_store", "url": str(db)})
@@ -209,7 +210,7 @@ except urllib.error.HTTPError as e:
         raise
 items = call("/knowledge-sources")["data"]["items"]
 sid = next(s["id"] for s in items if s["name"] == "demo-ext")
-r = call(f"/knowledge-sources/{sid}/sync")
+r = call(f"/knowledge-sources/{sid}/sync", {})["data"]
 print("   ks sync:", {k: r.get(k) for k in ("ok", "added")})
 EOF
 

@@ -928,6 +928,9 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
 
         @application.get("/{spa_path:path}", include_in_schema=False)
         async def spa_fallback(spa_path: str) -> FileResponse:
+            if spa_path.startswith("api/"):
+                # unknown API paths must 404, not fall through to the SPA
+                raise HTTPException(status_code=404, detail="Not Found")
             full = _dist / spa_path
             if spa_path and full.is_file():
                 return FileResponse(full)

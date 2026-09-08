@@ -5,6 +5,44 @@ Format: [Keep a Changelog](https://keepachangelog.com/) + SemVer.
 
 ## [Unreleased]
 
+## [0.4.0-p5c] — 2026-09-08
+
+Butler agent + three-tier retrieval + external knowledge sources.
+
+### Added
+- **Butler agent** (the inspector doubles as the management agent):
+  deterministic operation intents covering work-order FSM transitions and
+  creation, deletes, bulk cleanup, MCP register/remove, endpoint
+  toggle/delete, triggering an inspection, platform report/status;
+  HIGH-risk actions default to a two-phase dry-run → confirmation-token
+  flow (10 min TTL), `MEDOPS_BUTLER_AUTO=1` for unattended demos; every
+  execution lands in the `butler_audit` table; REST `POST
+  /api/v1/butler/task` + `GET /api/v1/butler/audit`; secretary delegates
+  operation intents to the butler with the trajectory merged into the
+  chat timeline
+- **Three-tier retrieval** behind `retrieve(query, top_k, backend)` with
+  `MEDOPS_KB_BACKEND=keyword|vector|legacy` (default keyword):
+  keyword = jieba terms + bm25s BM25 (new default, fully offline);
+  vector = fastembed BGE-small-zh-v1.5 (optional `[vector]` extra) +
+  sqlite-vec (`deploy/knowledge.vecdb`, rebuildable from PG) with
+  automatic keyword fallback; legacy 2-gram kept
+- **External knowledge sources**: `knowledge_source` table binding
+  web | rss | vector_store; ingestion pipeline with SSRF guard
+  (private-address rejection, `MEDOPS_KB_ALLOW_HOSTS` allowlist, 1 MB
+  cap), HTML tag stripping, ~800-char chunking, sha256 dedupe; REST
+  CRUD + `POST /{id}/sync`; scheduled sync via lifespan task (manual
+  default); butler tools `sync_knowledge_source` / `list_knowledge_sources`
+- Web knowledge page: retrieval-backend badge + source
+  binding/sync/delete panel
+
+### Fixed
+- device MCP servers are root workspace dependencies now — a plain
+  `uv sync` pruned them from the venv and broke every demo
+- experiment script: leftover process sweep + connect-retry loop
+  (TCP-ready ≠ MCP-protocol-ready), MSYS kill replaced by port/cmdline
+  PowerShell sweep, UTF-8 file bodies for Chinese curl payloads
+- registry `last_error` now unwraps ExceptionGroup leaves
+
 ## [0.3.0-p4c] — 2026-09-07
 
 Knowledge base + agent fault tools; ops polish for demo machines.
