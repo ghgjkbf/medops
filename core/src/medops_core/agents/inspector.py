@@ -137,11 +137,21 @@ class InspectorAgent(BaseAgent):
             raise RuntimeError("butler not enabled")
         return await self._butler.execute_task(task, confirm_token)
 
+    async def inspect_with_spec(self, spec: dict) -> InspectionResult:
+        """P6b: targeted inspection driven by a secretary requirement spec."""
+        devices = spec.get("devices") or []
+        if not devices or "all" in devices:
+            prefixes = None
+        else:
+            prefixes = {str(d).split("-")[0] for d in devices}
+        return await self.run_inspection(prefixes=prefixes)
+
     async def plan(self, user_input: str) -> str:  # pragma: no cover - not used
         return ""
 
     # ------------------------------------------------------------------ core
-    async def run_inspection(self) -> InspectionResult:
+    async def run_inspection(self, prefixes: set[str] | None = None) -> InspectionResult:
+        """Scheduled inspection; ``prefixes`` limits the device types (P6b)."""
 
         result = InspectionResult()
         mcp_unavailable: list[str] = []
@@ -150,6 +160,8 @@ class InspectorAgent(BaseAgent):
                 mcp_unavailable.append(handle.config.name)
                 continue
             device_type = handle.config.name.split("-")[0]
+            if prefixes is not None and device_type not in prefixes:
+                continue
             tools = _DETECTION_TOOLS.get(device_type, [])
             if not tools:
                 continue

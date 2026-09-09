@@ -144,6 +144,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         app.state.scheduler = InspectionScheduler(inspector, interval_s=inspect_s)
         app.state.scheduler.start()
+        app.state.inspector = inspector
         # butler (P5a): the inspector doubles as the management agent
         butler = ButlerAgent(
             db_factory=async_session_factory,
@@ -269,6 +270,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 llm, application.state.registry, session=None,
                 db_factory=application.state.db_factory,
                 butler=application.state.butler,
+                inspector=application.state.inspector,
             )
             result = await agent.run(req.message)
             answer = result.answer
@@ -938,6 +940,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                     llm, application.state.registry, session=None,
                     db_factory=application.state.db_factory,
                     butler=application.state.butler,
+                    inspector=application.state.inspector,
                 )
                 result = await agent.run(message)
                 answer = result.answer

@@ -99,13 +99,16 @@ class SecretaryAgent(BaseAgent):
     name = "secretary"
 
     def __init__(  # noqa: ANN001 - same style as base
-        self, llm, registry: MCPRegistry, session=None, db_factory=None, butler=None
+        self, llm, registry: MCPRegistry, session=None, db_factory=None, butler=None,
+        inspector=None,
     ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
         self._session = session
         self._db_factory = db_factory
         self._butler = butler
+        self._inspector = inspector
+        self._requirement = None  # RequirementFSM, lazily created (P6b)
         if db_factory is not None:
             # builtin (non-MCP) tools: knowledge retrieval + fault report
             self.register_tool(
@@ -145,8 +148,46 @@ class SecretaryAgent(BaseAgent):
             )
             return None
 
+    async def _serve_requirement(self, answer: str) -> str:
+        """P6b: collect answers; on completion synthesize the spec, run the
+        targeted inspection and summarize."""
+        fsm = self._requirement
+        if fsm.state == "gathering" and answer:
+            nxt = fsm.consume(answer)
+            if nxt is not None:
+                return nxt
+            if fsm.state != "spec_ready":
+                return fsm.next_question() or "信息已记录，继续补充一下？"
+        if fsm.state == "spec_ready":
+            spec = fsm.synthesize()
+            await fsm.execute(self._inspector or self)
+            summary = fsm.summarize()
+            self._tick_trail(f"{summary}", {"source": "requirement", "intent": fsm.intent})
+            return summary
+        question = await fsm.ask()
+        return question or "请描述设备异常的大致情况。"
+
+    def _tick_trail(self, text: str, meta: dict) -> None:  # noqa: ANN001 - meta dict
+        if hasattr(self, "_trail") and self._trail is not None:
+            try:
+                self._trail.append({"role": "user", "content": text, **meta})
+            except Exception:  # noqa: BLE001
+                pass
+
     async def plan(self, user_input: str) -> str:  # noqa: C901 - intent dispatch
+        # P6b: requirement-gathering mode takes precedence over intent dispatch
+        if self._requirement is not None and self._requirement.is_active():
+            return await self._serve_requirement(user_input)
         intent = classify_intent(user_input)
+        if not (intent.tool or intent.name == "butler" or intent.name == "knowledge"):
+            # only genuinely ambiguous/requesty input enters the FSM
+            from medops_core.agents.requirements import RequirementFSM  # noqa: PLC0415
+
+            if self._requirement is None:
+                self._requirement = RequirementFSM(self.llm, self._inspector)
+            if self._requirement.maybe_start(user_input):
+                return await self._serve_requirement("")
+            # fall through to the knowledge/rule answer below
         tool_payload: dict[str, Any] | None = None
 
         if intent.tool and intent.server:
