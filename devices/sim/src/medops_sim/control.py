@@ -65,7 +65,8 @@ class FaultController:
         self._last_mtime: float | None = None
         self.last_command: dict | None = None
 
-    def poll(self, engine, models: dict) -> dict | None:
+    def poll(self, engine, models: dict,
+             device_system: dict | None = None) -> dict | None:
         """Check the control file; apply changes. Returns the applied command or None."""
         try:
             mtime = self._cfile.stat().st_mtime
@@ -96,4 +97,30 @@ class FaultController:
             model = models.get(target)
             if model is not None:
                 model.inject_fault(params)
+
+        if command.get("device_system"):
+            self._apply_device_system(command["device_system"], device_system)
         return command
+
+    @staticmethod
+    def _apply_device_system(command: dict, device_system: dict | None) -> None:
+        """P6a: fault triggers ('fault') and repairs ('repair') for the
+        device's own system state (firmware / config / onboard agent)."""
+        if device_system is None:
+            return
+        if fault := command.get("fault"):
+            if fault == "firmware-stale":
+                device_system["firmware_version"] = "1.0.0"
+            elif fault == "config-drift":
+                device_system["config_hash"] = "drifted-dead-beef"
+            elif fault == "agent-stuck":
+                device_system["agent_health"] = "stuck"
+            return
+        if repair := command.get("repair"):
+            if repair == "firmware":
+                device_system["firmware_version"] = device_system["target_firmware_version"]
+            elif repair == "config":
+                device_system["config_hash"] = device_system["expected_config_hash"]
+            elif repair == "agent":
+                device_system["agent_health"] = "healthy"
+            return

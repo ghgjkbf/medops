@@ -68,3 +68,8 @@ class KnowledgeSourceIn(BaseModel):
     type: str = Field(min_length=1, max_length=16)  # web | rss | vector_store
     url: str = Field(min_length=1, max_length=512)
     schedule_minutes: int | None = Field(default=None, ge=5)
+
+
+class RemediationAgreeIn(BaseModel):
+    approve: bool = True
+    rule: str | None = None

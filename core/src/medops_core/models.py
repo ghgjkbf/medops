@@ -131,6 +131,9 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+    meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONVariant, nullable=False, default=dict
+    )  # P6a: remediation classification/plan attachment
     # selectin: async sessions must not trigger sync lazy loads on access.
     work_order: Mapped[WorkOrder | None] = relationship(
         back_populates="alerts", lazy="selectin"

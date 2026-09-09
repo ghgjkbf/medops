@@ -28,11 +28,41 @@ _FORBIDDEN_TOOLS = {"set_fault_scenario", "create_work_order", "update_work_orde
 
 # Detection tools worth calling per server name prefix (device servers).
 _DETECTION_TOOLS = {
-    "ct": ["get_tube_stats", "check_dicom_dir", "check_pacs_connectivity"],
-    "dr": ["get_detector_temp", "check_generator_status"],
-    "ventilator": ["get_realtime_params", "run_self_test"],
+    "ct": ["get_tube_stats", "check_dicom_dir", "check_pacs_connectivity",
+           "get_device_info"],
+    "dr": ["get_detector_temp", "check_generator_status", "get_device_info"],
+    "ventilator": ["get_realtime_params", "run_self_test", "get_device_info"],
     "ecg": ["get_waveform_quality"],
 }
+
+
+def evaluate_device_system(device_id: str, payload: dict) -> list[RuleHit]:
+    """P6a: the device's OWN system — firmware / config / onboard agent."""
+    system = (payload or {}).get("device_system")
+    if not isinstance(system, dict) or not system:
+        return []
+    hits: list[RuleHit] = []
+    now = datetime.now(UTC).isoformat()
+    if str(system.get("firmware_version", "")) != str(system.get("target_firmware_version", "")):
+        hits.append(RuleHit(
+            device_id=device_id, level="warning",
+            message=(f"firmware {system.get('firmware_version')} < required "
+                     f"{system.get('target_firmware_version')}"),
+            rule="device_system:firmware-stale", ts=now,
+        ))
+    if str(system.get("config_hash", "")) != str(system.get("expected_config_hash", "")):
+        hits.append(RuleHit(
+            device_id=device_id, level="warning",
+            message="config hash drift detected",
+            rule="device_system:config-drift", ts=now,
+        ))
+    if str(system.get("agent_health", "")) != "healthy":
+        hits.append(RuleHit(
+            device_id=device_id, level="warning",
+            message=f"device agent health={system.get('agent_health')}",
+            rule="device_system:agent-stuck", ts=now,
+        ))
+    return hits
 
 
 @dataclass
@@ -91,6 +121,7 @@ class InspectorAgent(BaseAgent):
         session: Session | None = None,
         notifier=None,  # noqa: ANN001 - Optional[[list[Alert]], None] callback (P3-3)
         butler=None,  # noqa: ANN001 - ButlerAgent (P5a: inspector doubles as butler)
+        remediation=None,  # noqa: ANN001 - RemediationService (P6a)
     ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
@@ -98,6 +129,7 @@ class InspectorAgent(BaseAgent):
         self._session = session
         self._notifier = notifier
         self._butler = butler
+        self._remediation = remediation
 
     async def execute_task(self, task: str, confirm_token: str | None = None) -> dict:
         """Butler role (P5a): execute a management task (delegated)."""
@@ -112,8 +144,10 @@ class InspectorAgent(BaseAgent):
     async def run_inspection(self) -> InspectionResult:
 
         result = InspectionResult()
+        mcp_unavailable: list[str] = []
         for handle in self._registry.handles.values():
             if handle.state.value == "unavailable":
+                mcp_unavailable.append(handle.config.name)
                 continue
             device_type = handle.config.name.split("-")[0]
             tools = _DETECTION_TOOLS.get(device_type, [])
@@ -139,6 +173,9 @@ class InspectorAgent(BaseAgent):
                         a.__dict__ if False else a
                         for a in evaluate_metrics(device_id, metrics)
                     )
+                if tool == "get_device_info":
+                    device_id = payload.get("device_id", f"{device_type}-sim-01")
+                    result.anomalies.extend(evaluate_device_system(device_id, payload))
 
         # de-duplicate anomalies by (device_id, metric)
         seen: set[tuple[str, str]] = set()
@@ -159,6 +196,11 @@ class InspectorAgent(BaseAgent):
             except Exception:  # noqa: BLE001 - KB is optional
                 pass
             result.alerts_created = len(alerts)
+            if self._remediation is not None:
+                try:
+                    await self._attach_remediation(alerts, result.anomalies, mcp_unavailable)
+                except Exception:  # noqa: BLE001 - never break the inspection
+                    pass
             critical = [a for a in alerts if a.level == AlertLevel.CRITICAL.value]
             result.work_orders_created = await self._create_work_orders(critical)
             if self._notifier is not None and alerts:
@@ -168,6 +210,35 @@ class InspectorAgent(BaseAgent):
                     pass
         result.provider_used = getattr(self.llm, "provider_name", "llm")
         return result
+
+    async def _attach_remediation(
+        self, alerts: list[Alert], hits: list[RuleHit], signals: list[str]
+    ) -> None:
+        """P6a: classify each anomaly, run auto-heal when allowed, then attach
+        the outcomes (per device) to the alert rows."""
+
+        outcomes: dict[str, list[dict]] = {}
+        for hit in hits:
+            try:
+                outcome = await self._remediation.heal(
+                    hit, signals={"mcp_unavailable": signals}
+                )
+            except Exception as exc:  # noqa: BLE001 - triage must never break inspection
+                outcome = {"kind": "unknown", "error": f"{type(exc).__name__}: {exc}"}
+            outcomes.setdefault(hit.device_id, []).append(outcome)
+        session = self._session or self._session_factory()
+        try:
+            for alert in alerts:
+                meta = dict(alert.meta or {})
+                meta["remediation"] = outcomes.get(alert.device_id, [])
+                await session.execute(
+                    update(Alert).where(Alert.id == alert.id).values(meta=meta)
+                )
+                alert.meta = meta
+            await session.commit()
+        finally:
+            if self._session is None:
+                await session.close()
 
     async def _store_alerts(self, hits: list[RuleHit]) -> list[Alert]:
         from medops_core.log_pipeline.analyzer import attribute_and_store  # noqa: PLC0415

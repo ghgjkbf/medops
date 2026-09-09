@@ -107,7 +107,8 @@ def _print_log_line(line: str) -> None:
 
 
 def write_metrics_snapshot(outbox: Path, device_id: str, t: float,
-                           values: dict[str, float]) -> None:
+                           values: dict[str, float],
+                           device_system: dict | None = None) -> None:
     """Atomically write the metrics snapshot for MCP servers to read.
 
     tmp+rename so readers never see a partial file (design §5: simulators
@@ -119,6 +120,8 @@ def write_metrics_snapshot(outbox: Path, device_id: str, t: float,
         "t": round(t, 3),
         "metrics": values,
     }
+    if device_system is not None:
+        snapshot["device_system"] = device_system
     outbox.mkdir(parents=True, exist_ok=True)
     target = outbox / "metrics_snapshot.json"
     tmp = target.with_suffix(".json.tmp")
@@ -186,6 +189,15 @@ def run_sim(args: argparse.Namespace) -> int:
     t = 0.0
     ticks = 0
     metrics_emitted = 0
+    # P6a: device's own system state (firmware / config / onboard agent),
+    # published in the snapshot and driven by control commands.
+    device_system: dict[str, str] = {
+        "firmware_version": "1.2.0",
+        "target_firmware_version": "1.2.0",
+        "config_hash": "a1b2c3",
+        "expected_config_hash": "a1b2c3",
+        "agent_health": "healthy",
+    }
     try:
         while True:
             hb = heartbeat.tick(t)
@@ -199,12 +211,12 @@ def run_sim(args: argparse.Namespace) -> int:
                           f"at t={t:.0f}s", flush=True)
                     break
 
-            applied = controller.poll(engine_ref, models)
+            applied = controller.poll(engine_ref, models, device_system)
             if applied is not None:
-                print(f"[CONTROL] applied fault command: {applied}", flush=True)
+                print(f"[CONTROL] applied {applied}", flush=True)
 
             values = {name: model.next(t) for name, model in models.items()}
-            write_metrics_snapshot(outbox, device_id, t, values)
+            write_metrics_snapshot(outbox, device_id, t, values, device_system)
             if ticks % _METRIC_EVERY_S == 0:
                 for name, value in values.items():
                     metrics_emitted += 1

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from mcp_fw import MedopsMCPServer
 from mcp_fw.control import make_set_fault_scenario_tool
+from mcp_fw.device_system import register_device_system_tools
 from mcp_fw.snapshot import evaluate_thresholds, read_metrics_snapshot
 from medops_common.thresholds import THRESHOLD_RULES as _ALL_RULES
 
@@ -29,6 +30,7 @@ class VentilatorServer(MedopsMCPServer):
         self.register_tool(
             make_set_fault_scenario_tool(outbox, "ventilator"), name="set_fault_scenario"
         )
+        register_device_system_tools(self, outbox, "ventilator")
 
     def get_realtime_params(self) -> dict:
         """Current ventilation parameters + threshold status."""

@@ -66,6 +66,7 @@ from medops_core.models import (
     McpServer,
     WorkOrder,
 )
+from medops_core.remediation import RemediationService
 from medops_core.schemas import (
     ButlerTaskIn,
     DeviceIn,
@@ -74,6 +75,7 @@ from medops_core.schemas import (
     MaintenancePlanIn,
     MaintenanceRecordIn,
     McpServerIn,
+    RemediationAgreeIn,
     WorkOrderIn,
     WorkOrderPatch,
 )
@@ -133,6 +135,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                     "message": a.message,
                     "attribution": a.attribution,
                     "work_order_id": a.work_order_id,
+                    "meta": a.meta or {},
                 })
 
         inspector = InspectorAgent(
@@ -149,6 +152,12 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         app.state.butler = butler
         inspector.butler = butler
+        # remediation service (P6a): triage + repair, wired into inspection
+        remediation_service = RemediationService(
+            app.state.registry, butler, async_session_factory
+        )
+        inspector.remediation = remediation_service
+        app.state.remediation = remediation_service
         sync_task = asyncio.create_task(_source_syncer(app))
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:
@@ -583,6 +592,49 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             if level:
                 items = [i for i in items if i["level"] == level]
             return {"ok": True, "data": _paginate(items, page, page_size)}
+
+    @application.get("/api/v1/alerts/{alert_id}/remediation")
+    async def alert_remediation(alert_id: int) -> dict:
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (await s.scalars(select(Alert).where(Alert.id == alert_id))).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="alert not found")
+            meta = dict(row.meta or {})
+        return {"ok": True, "data": meta.get("remediation", [])}
+
+    @application.post("/api/v1/alerts/{alert_id}/remediation/agree")
+    async def alert_remediation_agree(
+        alert_id: int, body: RemediationAgreeIn
+    ) -> dict:
+        """P6a: user consent for a device-software (or high-risk) repair."""
+        service = application.state.remediation
+        factory = application.state.db_factory
+        async with factory() as s:
+            row = (await s.scalars(select(Alert).where(Alert.id == alert_id))).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="alert not found")
+            device_id = row.device_id
+            message = row.message or ""
+            meta = dict(row.meta or {})
+        hit = {
+            "rule": "device_system:unknown",
+            "device_id": device_id,
+            "message": message,
+            "level": "warning",
+        }
+        if body.rule:
+            hit["rule"] = body.rule
+        outcome = await service.heal(
+            hit, signals={"mcp_unavailable": []},
+            consent="allow" if body.approve else "deny",
+        )
+        meta["remediation"] = meta.get("remediation") or []
+        meta["remediation"].append({**outcome, "consent_from": "ui"})
+        async with factory() as s:
+            await s.execute(update(Alert).where(Alert.id == alert_id).values(meta=meta))
+            await s.commit()
+        return {"ok": True, "data": outcome}
 
     @application.delete("/api/v1/alerts/{alert_id}")
     async def delete_alert(alert_id: int) -> dict:
