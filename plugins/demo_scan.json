@@ -1,0 +1,9 @@
+{
+  "name": "demo_scan",
+  "description": "演示扫描插件 — 巡检 CT 时重点检查球管",
+  "kind": "prompt_template",
+  "risk": "safe",
+  "config": {
+    "template": "巡检 {device} 重点检查球管温度和冷却系统"
+  }
+}

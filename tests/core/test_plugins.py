@@ -60,7 +60,9 @@ async def test_set_state_unknown_raises(factory):
         await set_plugin_state(factory, "nope", True)
 
 
-async def test_list_plugins_gate_flags(factory):
+async def test_list_plugins_gate_flags(factory, monkeypatch):
+    monkeypatch.delenv("MEDOPS_PLUGIN_CONSOLE", raising=False)
+    monkeypatch.delenv("MEDOPS_PLUGIN_SEARCH", raising=False)
     items = await list_plugins(factory)
     by_name = {i["name"]: i for i in items}
     assert by_name["prompt_builder"]["enabled"] is False
@@ -192,7 +194,8 @@ async def test_doc_searcher_offline_via_kb(monkeypatch):
 
 
 # -------------------------------------------------------------------- security
-async def test_gate_blocks_even_when_enabled(factory):
+async def test_gate_blocks_even_when_enabled(factory, monkeypatch):
+    monkeypatch.delenv("MEDOPS_PLUGIN_CONSOLE", raising=False)
     await set_plugin_state(factory, "console_actor", True)
     with pytest.raises(GateBlocked):
         await run_skill("console_actor", {"device": "ct", "steps": []}, factory=factory)

@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from medops_common.constants import (
     WORK_ORDER_TRANSITIONS,
@@ -162,6 +162,24 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         inspector.remediation = remediation_service
         app.state.remediation = remediation_service
+        # scan plugins/ directory on startup (P6c-ext)
+        try:
+            from medops_core.plugins.file_import import scan_plugins_dir  # noqa: PLC0415
+
+            scan_results = await scan_plugins_dir(async_session_factory)
+            if scan_results:
+                import logging  # noqa: PLC0415
+
+                log = logging.getLogger("medops")
+                for r in scan_results:
+                    if "error" in r:
+                        log.warning("plugin scan: %s - %s", r.get("file", "?"), r["error"])
+                    else:
+                        log.info("plugin scan: %s imported", r.get("name", r.get("file", "?")))
+        except Exception as exc:  # noqa: BLE001 - startup must not fail
+            import logging  # noqa: PLC0415
+
+            logging.getLogger("medops").warning("plugin scan failed: %s", exc)
         sync_task = asyncio.create_task(_source_syncer(app))
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:
@@ -549,6 +567,30 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+        return {"ok": True, "data": state}
+
+    @application.post("/api/v1/plugins/import-file")
+    async def plugins_import_file(file: UploadFile) -> dict:
+        """Upload a .json plugin manifest file and import it."""
+        from medops_core.plugins.file_import import (  # noqa: PLC0415
+            import_plugin_from_file,
+        )
+
+        if not file.filename or not file.filename.lower().endswith(".json"):
+            raise HTTPException(422, detail="only .json files accepted")
+        import os  # noqa: PLC0415
+        import tempfile  # noqa: PLC0415
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        try:
+            content = await file.read()
+            tmp.write(content)
+            tmp.close()
+            state = await import_plugin_from_file(
+                application.state.db_factory, tmp.name
+            )
+        finally:
+            os.unlink(tmp.name)
         return {"ok": True, "data": state}
 
     @application.post("/api/v1/plugins/{plugin_name}/run")

@@ -7,6 +7,10 @@ setlocal enabledelayedexpansion
 set "ROOT=%~dp0.."
 cd /d "%ROOT%"
 
+REM Gate env vars for risky plugins (P6c - console_actor / doc_searcher)
+set "MEDOPS_PLUGIN_CONSOLE=1"
+set "MEDOPS_PLUGIN_SEARCH=1"
+
 REM Portable PostgreSQL bin dir — EDIT for your machine, or set MEDOPS_PGBIN.
 if defined MEDOPS_PGBIN set "PGBIN=%MEDOPS_PGBIN%"
 if not defined PGBIN set "PGBIN=D:\ai-use\tools\pg16\pgsql\bin"

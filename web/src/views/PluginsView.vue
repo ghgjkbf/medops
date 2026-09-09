@@ -6,12 +6,14 @@ import { apiGet, apiPost } from '../api/client'
 interface Plugin {
   name: string; description: string; risk: string
   needs_gate: string; enabled: boolean; gate_ok: boolean
+  imported?: boolean; kind?: string
 }
 
 const items = ref<Plugin[]>([])
 const loading = ref(false)
 const dialog = ref(false)
 const importing = ref(false)
+const fileRef = ref<HTMLInputElement | null>(null)
 const form = ref({ name: '', description: '', risk: 'safe', kind: 'prompt_template', config: '{\n  "template": "巡检 {device} 重点看 {focus}"\n}' })
 
 async function load() {
@@ -41,6 +43,24 @@ async function doImport() {
     importing.value = false
   }
 }
+
+async function uploadFile() {
+  const el = fileRef.value
+  if (!el || !el.files?.length) return
+  const fd = new FormData()
+  fd.append('file', el.files[0])
+  importing.value = true
+  try {
+    const body = await apiPost('/plugins/import-file', fd)
+    ElMessage.success(`文件 ${el.files[0].name} 导入为插件「${body.data.name}」`)
+    el.value = ''
+    load()
+  } catch (e: unknown) {
+    ElMessage.error(`导入失败: ${(e as Error).message}`)
+  } finally {
+    importing.value = false
+  }
+}
 onMounted(load)
 </script>
 
@@ -49,7 +69,7 @@ onMounted(load)
     <template #header>
       <div class="head">
         <span>Agent 插件（内置技能）</span>
-        <el-button size="small" type="primary" plain @click="dialog = true">导入插件</el-button>
+        <el-button size="small" type="primary" plain @click="dialog = true">导入 JSON</el-button>
       </div>
     </template>
 
@@ -73,6 +93,12 @@ onMounted(load)
           <el-tag v-else size="small" effect="plain">无</el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="来源" width="80">
+        <template #default="{ row }">
+          <el-tag v-if="row.imported && row.kind" size="small" type="warning" effect="plain">导入</el-tag>
+          <el-tag v-else size="small" type="info" effect="plain">内置</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="启用" width="100">
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" :disabled="!row.gate_ok && !!row.needs_gate"
@@ -81,7 +107,12 @@ onMounted(load)
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialog" title="导入插件" width="520px">
+    <div class="mt12 file-import">
+      <span class="file-label">从文件导入：</span>
+      <input ref="fileRef" type="file" accept=".json" @change="uploadFile" />
+    </div>
+
+    <el-dialog v-model="dialog" title="导入插件（JSON 表单）" width="520px">
       <el-form label-width="90px" size="small">
         <el-form-item label="名称">
           <el-input v-model="form.name" placeholder="demo_ext（字母/数字/_/-）" />
@@ -119,4 +150,6 @@ onMounted(load)
 <style scoped>
 .head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .mt12 { margin-top: 12px; }
+.file-import { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
+.file-label { color: var(--el-text-color-secondary); font-size: 13px; }
 </style>
