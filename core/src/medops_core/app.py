@@ -162,24 +162,23 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         )
         inspector.remediation = remediation_service
         app.state.remediation = remediation_service
-        # scan plugins/ directory on startup (P6c-ext)
+        # import plugins/ directory manifests on startup
         try:
-            from medops_core.plugins.file_import import scan_plugins_dir  # noqa: PLC0415
-
-            scan_results = await scan_plugins_dir(async_session_factory)
-            if scan_results:
-                import logging  # noqa: PLC0415
-
-                log = logging.getLogger("medops")
-                for r in scan_results:
-                    if "error" in r:
-                        log.warning("plugin scan: %s - %s", r.get("file", "?"), r["error"])
-                    else:
-                        log.info("plugin scan: %s imported", r.get("name", r.get("file", "?")))
-        except Exception as exc:  # noqa: BLE001 - startup must not fail
-            import logging  # noqa: PLC0415
-
-            logging.getLogger("medops").warning("plugin scan failed: %s", exc)
+            from medops_core.plugins.imports import import_plugin as _ip
+            import json
+            pdir = Path(__file__).resolve().parent.parent.parent.parent.parent / "plugins"
+            if pdir.is_dir():
+                for f in sorted(pdir.iterdir()):
+                    if f.suffix == ".json":
+                        try:
+                            m = json.loads(f.read_text(encoding="utf-8"))
+                            await _ip(async_session_factory, m.get("name", f.stem),
+                                     m["kind"], m.get("description", ""),
+                                     m.get("risk", "safe"), m.get("config", {}))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
         sync_task = asyncio.create_task(_source_syncer(app))
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:

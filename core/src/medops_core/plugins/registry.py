@@ -87,7 +87,7 @@ async def list_plugins(factory) -> list[dict[str, Any]]:
             "name": name, "description": row.description, "risk": row.risk,
             "needs_gate": "MEDOPS_PLUGIN_CONSOLE" if row.risk == "system" else "",
             "enabled": bool(row.enabled),
-            "gate_ok": not (row.risk == "system" and not os.environ.get("MEDOPS_PLUGIN_CONSOLE")),
+            "gate_ok": row.risk != "system" or os.environ.get("MEDOPS_PLUGIN_CONSOLE") is not None,
             "imported": True, "kind": meta.get("kind", ""),
         })
     return out
