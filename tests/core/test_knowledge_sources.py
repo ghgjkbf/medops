@@ -160,7 +160,9 @@ async def test_vector_store_import(factory: async_sessionmaker, tmp_path) -> Non
     assert any("外部知识一" in t for t in titles)
 
 
-async def test_vector_store_missing_file_errors(factory: async_sessionmaker, tmp_path) -> None:  # noqa: ANN001
+async def test_vector_store_missing_file_errors(
+    factory: async_sessionmaker, tmp_path,
+) -> None:  # noqa: ANN001
     sid = await sources.add_source(factory, "ghost", "vector_store", str(tmp_path / "no.vecdb"))
     result = await sources.sync_source(factory, sid)
     assert result["ok"] is False
@@ -223,7 +225,9 @@ class _StubRegistry:
 
 
 # ------------------------------------------------------------------ butler
-async def test_butler_knowledge_source_tools(factory: async_sessionmaker, tmp_path) -> None:  # noqa: ANN001
+async def test_butler_knowledge_source_tools(
+    factory: async_sessionmaker, tmp_path,
+) -> None:  # noqa: ANN001
     db = tmp_path / "ext2.vecdb"
     conn = sqlite3.connect(db)
     conn.execute("CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT, content TEXT)")

@@ -196,3 +196,52 @@ async def test_gate_blocks_even_when_enabled(factory):
     await set_plugin_state(factory, "console_actor", True)
     with pytest.raises(GateBlocked):
         await run_skill("console_actor", {"device": "ct", "steps": []}, factory=factory)
+
+
+# ---------------------------------------------------------------- imports (P6c-ext)
+async def test_import_plugin_persists_and_lists(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    await import_plugin(factory, "demo_ext", "prompt_template",
+                        description="外部演示插件", config={"template": "巡检 {device} 重点看 {focus}"})
+    items = await list_plugins(factory)
+    ext = next(i for i in items if i["name"] == "demo_ext")
+    assert ext["imported"] is True
+    assert ext["kind"] == "prompt_template"
+    assert ext["enabled"] is False
+
+
+async def test_import_plugin_rejects_bad_kind(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    with pytest.raises(ValueError):
+        await import_plugin(factory, "evil_x", "shell_exec", config={})
+
+
+async def test_run_imported_prompt_template(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    await import_plugin(factory, "demo_p", "prompt_template",
+                        config={"template": "巡检 {device} 重点看 {focus}"})
+    await set_plugin_state(factory, "demo_p", True)
+    res = await run_skill("demo_p", {"device": "ct", "focus": "球管"}, factory=factory)
+    assert res["ok"] and res["imported"] is True
+    assert "ct" in res["output"] and "球管" in res["output"]
+
+
+async def test_run_imported_kb_query(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    await import_plugin(factory, "demo_kb", "kb_query",
+                        config={"query_template": "{query}"})
+    await set_plugin_state(factory, "demo_kb", True)
+    res = await run_skill("demo_kb", {"query": "球管过热"}, factory=factory)
+    assert res["ok"] and res["source"] == "offline"
+
+
+async def test_imported_plugin_not_enabled_blocked(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    await import_plugin(factory, "demo_off", "prompt_template", config={"template": "x"})
+    with pytest.raises(GateBlocked):
+        await run_skill("demo_off", {}, factory=factory)

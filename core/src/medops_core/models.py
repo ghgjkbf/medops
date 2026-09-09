@@ -291,6 +291,9 @@ class Plugin(Base):
     description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     risk: Mapped[str] = mapped_column(String(16), nullable=False, default="safe")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONVariant, nullable=False, default=dict
+    )  # imported-plugin kind/config (P6c-ext)
     installed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

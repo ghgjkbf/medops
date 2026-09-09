@@ -75,6 +75,9 @@ from medops_core.schemas import (
     MaintenancePlanIn,
     MaintenanceRecordIn,
     McpServerIn,
+    PluginImportIn,
+    PluginRunIn,
+    PluginStateIn,
     RemediationAgreeIn,
     WorkOrderIn,
     WorkOrderPatch,
@@ -529,6 +532,23 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
             state = await _set(application.state.db_factory, plugin_name, body.enabled)
         except KeyError:
             raise HTTPException(status_code=404, detail="plugin not found") from None
+        return {"ok": True, "data": state}
+
+    @application.post("/api/v1/plugins/import")
+    async def plugins_import(body: PluginImportIn) -> dict:
+        from medops_core.plugins.imports import import_plugin  # noqa: PLC0415
+
+        try:
+            state = await import_plugin(
+                application.state.db_factory,
+                body.name,
+                body.kind,
+                description=body.description,
+                risk=body.risk,
+                config=body.config,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
         return {"ok": True, "data": state}
 
     @application.post("/api/v1/plugins/{plugin_name}/run")

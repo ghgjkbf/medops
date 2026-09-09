@@ -83,3 +83,11 @@ class PluginStateIn(BaseModel):
 
 class PluginRunIn(BaseModel):
     args: dict[str, Any] = Field(default_factory=dict)
+
+
+class PluginImportIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str = Field(default="", max_length=255)
+    risk: str = Field(default="safe", max_length=16)
+    kind: str = Field(min_length=1, max_length=32)
+    config: dict[str, Any] = Field(default_factory=dict)

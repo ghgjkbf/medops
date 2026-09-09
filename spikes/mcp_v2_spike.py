@@ -62,7 +62,8 @@ async def verify_client(client: Client, label: str) -> None:
     assert r.structured_content["result"] == 3, r.structured_content
 
     r2 = await client.call_tool("get_device_status", {"device_id": "dev-007"})
-    print(f"[{label}] get_device_status -> content[0].text={r2.content[0].text!r} structured={r2.structured_content}")
+    text = r2.content[0].text if r2.content else ""
+    print(f"[{label}] get_device_status -> text={text!r} structured={r2.structured_content}")
     assert not r2.is_error
     # v2 (2.1.1): plain dict returns are serialized into TextContent JSON;
     # structured_content is only populated for tools declaring an output schema.

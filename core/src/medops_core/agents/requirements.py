@@ -138,7 +138,7 @@ class RequirementFSM:
     def _bank(self) -> list[tuple[str, str]]:
         return _QUESTION_BANK.get(self.intent, _QUESTION_BANK["device_check"])
 
-    def next_question(self) -> str | None:
+    def next_question(self) -> str | None:  # noqa: PLR5501
         bank = self._bank()
         if self._question_index >= len(bank):
             return None
@@ -179,7 +179,10 @@ class RequirementFSM:
         parsed = _parse_devices(text) if slot == "devices" else [text.strip()]
         if slot == "devices":
             if parsed:
-                self.fields["devices"] = list(dict.fromkeys(self.fields["devices"] + parsed))  # type: ignore[operator,union-attr]
+                merged = list(dict.fromkeys(
+                    self.fields["devices"] + parsed  # type: ignore[operator]
+                ))
+                self.fields["devices"] = merged
             elif any(w in text for w in _MARKER_WORDS):
                 self.fields["devices"] = ["all"]
         elif slot == "symptoms":

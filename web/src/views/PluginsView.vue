@@ -10,6 +10,9 @@ interface Plugin {
 
 const items = ref<Plugin[]>([])
 const loading = ref(false)
+const dialog = ref(false)
+const importing = ref(false)
+const form = ref({ name: '', description: '', risk: 'safe', kind: 'prompt_template', config: '{\n  "template": "巡检 {device} 重点看 {focus}"\n}' })
 
 async function load() {
   loading.value = true
@@ -24,6 +27,20 @@ async function toggle(p: Plugin) {
   ElMessage.success(`插件 ${p.name} 已${p.enabled ? '停用' : '启用'}`)
   load()
 }
+
+async function doImport() {
+  importing.value = true
+  try {
+    let config: Record<string, unknown> = {}
+    try { config = JSON.parse(form.value.config) } catch { /* form shows error below */ }
+    await apiPost('/plugins/import', { ...form.value, config })
+    ElMessage.success(`插件 ${form.value.name} 已导入`)
+    dialog.value = false
+    load()
+  } finally {
+    importing.value = false
+  }
+}
 onMounted(load)
 </script>
 
@@ -32,7 +49,7 @@ onMounted(load)
     <template #header>
       <div class="head">
         <span>Agent 插件（内置技能）</span>
-        <el-tag size="small" type="info" effect="plain">5 项内置 · 全部可离线运行</el-tag>
+        <el-button size="small" type="primary" plain @click="dialog = true">导入插件</el-button>
       </div>
     </template>
 
@@ -63,10 +80,43 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+
+    <el-dialog v-model="dialog" title="导入插件" width="520px">
+      <el-form label-width="90px" size="small">
+        <el-form-item label="名称">
+          <el-input v-model="form.name" placeholder="demo_ext（字母/数字/_/-）" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="form.description" placeholder="插件用途说明" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="form.kind" style="width: 100%">
+            <el-option label="prompt_template（提示词模板）" value="prompt_template" />
+            <el-option label="code_template（修复脚本模板）" value="code_template" />
+            <el-option label="tool_chain（设备动作链）" value="tool_chain" />
+            <el-option label="kb_query（知识检索模板）" value="kb_query" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="风险">
+          <el-select v-model="form.risk" style="width: 100%">
+            <el-option label="safe" value="safe" />
+            <el-option label="triggered" value="triggered" />
+            <el-option label="system（需门控环境变量）" value="system" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="配置 JSON">
+          <el-input v-model="form.config" type="textarea" :rows="6" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button size="small" @click="dialog = false">取消</el-button>
+        <el-button size="small" type="primary" :loading="importing" @click="doImport">导入</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
 <style scoped>
-.head { display: flex; gap: 10px; align-items: center; }
+.head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .mt12 { margin-top: 12px; }
 </style>

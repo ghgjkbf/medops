@@ -122,7 +122,9 @@ class ButlerAgent:
             return spec.op, self._extract_args(spec.op, t, m)
         return None, {}
 
-    def _extract_args(self, op: str, task: str, m: re.Match) -> dict[str, Any]:  # noqa: C901, PLR0912
+    def _extract_args(  # noqa: C901, PLR0912
+        self, op: str, task: str, m: re.Match,
+    ) -> dict[str, Any]:
         args: dict[str, Any] = {}
         if op == "transition_work_order":
             wo_id = m.group(1) or m.group(3)
@@ -152,6 +154,7 @@ class ButlerAgent:
             args["name"] = m.group(2)
             args["enabled"] = m.group(1) == "启用"
         elif op == "register_mcp_server":
+            # noqa: E501 - kept compact, mirrors butler regex
             args["name"] = m.group(1)
             args["url"] = m.group(2)
         elif op == "sync_knowledge_source":

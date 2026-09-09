@@ -65,8 +65,10 @@ async def list_plugins(factory) -> list[dict[str, Any]]:
         rows = (await s.scalars(select(Plugin))).all()
     by_name = {r.name: r for r in rows}
     out: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for name, m in manifests().items():
         row = by_name.get(name)
+        seen.add(name)
         out.append(
             {
                 "name": name,
@@ -77,15 +79,35 @@ async def list_plugins(factory) -> list[dict[str, Any]]:
                 "gate_ok": gate_allowed(m) is None,
             }
         )
+    for name, row in by_name.items():
+        if name in seen:
+            continue
+        meta = dict(row.meta or {})
+        out.append(
+            {
+                "name": name,
+                "description": row.description,
+                "risk": row.risk,
+                "needs_gate": "MEDOPS_PLUGIN_CONSOLE" if row.risk == "system" else "",
+                "enabled": bool(row.enabled),
+                "gate_ok": gate_allowed(PluginManifest(name, "", row.risk,
+                                                       needs_gate=(
+                                                           "MEDOPS_PLUGIN_CONSOLE"
+                                                           if row.risk == "system" else None
+                                                       ))) is None,
+                "imported": True,
+                "kind": meta.get("kind", ""),
+            }
+        )
     return out
 
 
 async def set_plugin_state(factory, name: str, enabled: bool) -> dict[str, Any]:
     manifest = _BUILTIN_MANIFESTS.get(name)
-    if manifest is None:
-        raise KeyError(name)
     async with factory() as s:
         row = (await s.scalars(select(Plugin).where(Plugin.name == name))).first()
+        if manifest is None and row is None:
+            raise KeyError(name)
         if row is None:
             s.add(Plugin(name=name, description=manifest.description, risk=manifest.risk,
                          enabled=enabled))
@@ -119,6 +141,27 @@ async def run_skill(
 ) -> dict[str, Any]:
     """Dispatch to a builtin skill with gate enforcement + optional LLM step."""
     manifest = _BUILTIN_MANIFESTS.get(name)
+    if manifest is None and factory is not None:
+        from medops_core.plugins.imports import imported_entry, run_imported  # noqa: PLC0415
+
+        entry = await imported_entry(factory, name)
+        if entry is None:
+            raise KeyError(name)
+        if not entry["enabled"]:
+            raise GateBlocked(f"plugin '{name}' 未启用")
+        # risky imported plugins need the console/search env gate too
+        from medops_core.plugins.registry import PluginManifest as _PM  # noqa: PLC0415
+
+        reason = gate_allowed(_PM(name, "", entry["risk"], needs_gate=(
+            "MEDOPS_PLUGIN_CONSOLE" if entry["risk"] == "system" else None
+        )))
+        if reason is not None:
+            raise GateBlocked(reason)
+        result = await run_imported(
+            {"factory": factory, "llm": llm, "registry": registry, "args": args},
+            entry,
+        )
+        return {"ok": True, "plugin": name, "imported": True, **result}
     if manifest is None:
         raise KeyError(name)
     # defense in depth: env gate checked on EVERY invocation

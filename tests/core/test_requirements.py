@@ -119,7 +119,8 @@ class _FakeInspector:
     async def inspect_with_spec(self, spec: dict):  # noqa: ANN001
         self.specs.append(spec)
         return [
-            {"device_id": "ct-sim-01", "rule": "threshold:tube_temp:error", "message": "tube_temp=78"}
+            {"device_id": "ct-sim-01", "rule": "threshold:tube_temp:error",
+             "message": "tube_temp=78"}
         ]
 
 
@@ -166,7 +167,9 @@ async def test_inspect_with_spec_unknown_device_empty(monkeypatch):
         return []
 
     monkeypatch.setattr(InspectorAgent, "_store_alerts", _no_store)
-    inspector = InspectorAgent(_FakeLLM(), _FakeRegistry([_FakeHandle("ct-01", ["get_tube_stats"])]), None)
+    inspector = InspectorAgent(
+        _FakeLLM(), _FakeRegistry([_FakeHandle("ct-01", ["get_tube_stats"])]), None
+    )
     result = await inspector.inspect_with_spec({"devices": ["zzz-sim-01"]})
     assert result.checked_servers == []
     assert result.anomalies == []
