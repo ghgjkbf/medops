@@ -16,6 +16,7 @@
         <el-menu-item index="/api-endpoints">API 接入</el-menu-item>
         <el-menu-item index="/chat">智能问答</el-menu-item>
         <el-menu-item index="/knowledge">知识库</el-menu-item>
+        <el-menu-item index="/plugins">插件</el-menu-item>
         <el-menu-item index="/cleanup">数据清理</el-menu-item>
         <el-menu-item index="/help">使用说明</el-menu-item>
       </el-menu>

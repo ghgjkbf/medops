@@ -5,6 +5,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/) + SemVer.
 
 ## [Unreleased]
 
+## [0.5.0-p6c] — 2026-09-09
+
+Builtin plugin framework + five skills.
+
+### Added
+- Plugin registry: manifest-driven skills, enable state persisted (`plugin`
+  table), risk levels, **env-gated risky skills** (console_actor /
+  doc_searcher require MEDOPS_PLUGIN_CONSOLE / MEDOPS_PLUGIN_SEARCH and are
+  blocked even when enabled in the UI without the gate)
+- Skills: prompt_builder (spec→prompt, LLM polish hook), code_guard
+  (template codegen + compile/structural checks, LLM review hook),
+  tool_finder (keyword ranking over MCP tools + butler ops),
+  console_actor (simulated device console macros → device MCP tools),
+  doc_searcher (offline KB first, optional online endpoint)
+- REST /api/v1/plugins (list / enable / run) + 插件 panel in the web console
+- LLM enhancement hooks run only when a real provider is attached
+
+## [0.5.0-p6b] — 2026-09-09
+
+Secretary requirement gathering.
+
+### Added
+- RequirementFSM: vague/requesty input → structured question bank (≤3 rounds)
+  → complete prompt spec (role/context/action/output) → targeted inspection
+  (`inspector.inspect_with_spec`, device-type filter) → summary
+- LLM question phrasing (async-safe, deterministic bank fallback)
+- Concrete intents bypass the FSM (golden scenarios unchanged)
+
+## [0.5.0-p6a] — 2026-09-09
+
+Fault triage & remediation (three channels).
+
+### Added
+- `remediation.py`: rule-first classification + optional LLM check
+  (`llm_verified`); platform_sw auto-heals through butler ops (low auto,
+  high consent) with verify + escalation; device_sw (firmware/config/agent)
+  **always asks the user first**; hardware → remediation package
+  (cause/steps/risk/verification)
+- Device-system toolset: get_device_info / upgrade_firmware / apply_config /
+  restart_device_agent (shared via `mcp_fw.device_system`, sim-side state +
+  FaultController fault/repair commands)
+- Alert.meta migration 0007; WS alert payload includes meta
+- REST: GET /alerts/{id}/remediation + POST agree; AlertsView disposition
+  column + consent dialog
+
 ## [0.4.0-p5c] — 2026-09-08
 
 Butler agent + three-tier retrieval + external knowledge sources.

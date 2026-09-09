@@ -513,6 +513,44 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         result = await sources.sync_source(application.state.db_factory, source_id)
         return {"ok": True, "data": result}
 
+    # ------------------------------------------------- plugins / builtin skills (P6c)
+    @application.get("/api/v1/plugins")
+    async def plugins_list() -> dict:
+        from medops_core.plugins.registry import list_plugins as _list  # noqa: PLC0415
+
+        items = await _list(application.state.db_factory)
+        return {"ok": True, "data": {"count": len(items), "items": items}}
+
+    @application.post("/api/v1/plugins/{plugin_name}")
+    async def plugins_set(plugin_name: str, body: PluginStateIn) -> dict:
+        from medops_core.plugins.registry import set_plugin_state as _set  # noqa: PLC0415
+
+        try:
+            state = await _set(application.state.db_factory, plugin_name, body.enabled)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="plugin not found") from None
+        return {"ok": True, "data": state}
+
+    @application.post("/api/v1/plugins/{plugin_name}/run")
+    async def plugins_run(plugin_name: str, body: PluginRunIn) -> dict:
+        from medops_core.plugins.registry import GateBlocked, run_skill  # noqa: PLC0415
+
+        try:
+            outcome = await run_skill(
+                plugin_name,
+                body.args,
+                factory=application.state.db_factory,
+                llm=application.state.llm,
+                registry=application.state.registry,
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="plugin not found") from None
+        except GateBlocked as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return {"ok": True, "data": outcome}
+
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")
     async def list_devices(

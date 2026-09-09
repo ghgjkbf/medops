@@ -3,6 +3,8 @@ dicts wrapped in the {"ok": true, "data": ...} envelope by the routes)."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -73,3 +75,11 @@ class KnowledgeSourceIn(BaseModel):
 class RemediationAgreeIn(BaseModel):
     approve: bool = True
     rule: str | None = None
+
+
+class PluginStateIn(BaseModel):
+    enabled: bool
+
+
+class PluginRunIn(BaseModel):
+    args: dict[str, Any] = Field(default_factory=dict)

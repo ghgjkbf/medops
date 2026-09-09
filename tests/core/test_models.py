@@ -61,6 +61,7 @@ async def test_core_tables_exist(initialized_engine: AsyncEngine) -> None:
         "api_endpoint",
         "butler_audit",
         "knowledge_source",
+        "plugin",
     }
     assert expected == set(Base.metadata.tables.keys())
 

@@ -282,6 +282,20 @@ class KnowledgeSource(Base):
     meta: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False, default=dict)
 
 
+class Plugin(Base):
+    """P6c: agent plugin / builtin skill registry state."""
+
+    __tablename__ = "plugin"
+
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    description: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    risk: Mapped[str] = mapped_column(String(16), nullable=False, default="safe")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    installed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 class ApiEndpoint(Base):
     """外部 API 接入配置（P2.5）。
 
