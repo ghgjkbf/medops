@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from medops_common.constants import (
     WORK_ORDER_TRANSITIONS,
@@ -572,26 +572,32 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
     @application.post("/api/v1/plugins/import-file")
     async def plugins_import_file(file: UploadFile) -> dict:
         """Upload a .json plugin manifest file and import it."""
-        from medops_core.plugins.file_import import (  # noqa: PLC0415
-            import_plugin_from_file,
-        )
-
         if not file.filename or not file.filename.lower().endswith(".json"):
             raise HTTPException(422, detail="only .json files accepted")
-        import os  # noqa: PLC0415
-        import tempfile  # noqa: PLC0415
+        import json  # noqa: PLC0415
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
-        try:
-            content = await file.read()
-            tmp.write(content)
-            tmp.close()
-            state = await import_plugin_from_file(
-                application.state.db_factory, tmp.name
-            )
-        finally:
-            os.unlink(tmp.name)
+        from medops_core.plugins.imports import import_plugin  # noqa: PLC0415
+
+        manifest = json.loads(await file.read())
+        state = await import_plugin(
+            application.state.db_factory,
+            name=manifest.get("name", file.filename.rsplit(".", 1)[0]),
+            kind=manifest["kind"],
+            description=manifest.get("description", ""),
+            risk=manifest.get("risk", "safe"),
+            config=manifest.get("config", {}),
+        )
         return {"ok": True, "data": state}
+
+    @application.delete("/api/v1/plugins/{plugin_name}")
+    async def plugins_delete(plugin_name: str) -> dict:
+        from medops_core.plugins.registry import delete_plugin  # noqa: PLC0415
+
+        try:
+            await delete_plugin(application.state.db_factory, plugin_name)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="plugin not found") from None
+        return {"ok": True, "data": {"deleted": plugin_name}}
 
     @application.post("/api/v1/plugins/{plugin_name}/run")
     async def plugins_run(plugin_name: str, body: PluginRunIn) -> dict:

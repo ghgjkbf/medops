@@ -22,7 +22,6 @@ Supported kinds: prompt_template, code_template, tool_chain, kb_query.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 

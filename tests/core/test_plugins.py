@@ -7,6 +7,7 @@ import pytest
 from medops_core.plugins import registry
 from medops_core.plugins.registry import (
     GateBlocked,
+    delete_plugin,
     list_plugins,
     run_skill,
     set_plugin_state,
@@ -248,3 +249,15 @@ async def test_imported_plugin_not_enabled_blocked(factory):
     await import_plugin(factory, "demo_off", "prompt_template", config={"template": "x"})
     with pytest.raises(GateBlocked):
         await run_skill("demo_off", {}, factory=factory)
+
+
+# ---------------------------------------------------------------- uninstall (P6c-ext)
+async def test_delete_plugin_removes_and_unknown_raises(factory):
+    from medops_core.plugins.imports import import_plugin
+
+    await import_plugin(factory, "del_me", "prompt_template", config={"template": "x"})
+    await delete_plugin(factory, "del_me")
+    items = await list_plugins(factory)
+    assert all(i["name"] != "del_me" for i in items)
+    with pytest.raises(KeyError):
+        await delete_plugin(factory, "nope")

@@ -83,22 +83,13 @@ async def list_plugins(factory) -> list[dict[str, Any]]:
         if name in seen:
             continue
         meta = dict(row.meta or {})
-        out.append(
-            {
-                "name": name,
-                "description": row.description,
-                "risk": row.risk,
-                "needs_gate": "MEDOPS_PLUGIN_CONSOLE" if row.risk == "system" else "",
-                "enabled": bool(row.enabled),
-                "gate_ok": gate_allowed(PluginManifest(name, "", row.risk,
-                                                       needs_gate=(
-                                                           "MEDOPS_PLUGIN_CONSOLE"
-                                                           if row.risk == "system" else None
-                                                       ))) is None,
-                "imported": True,
-                "kind": meta.get("kind", ""),
-            }
-        )
+        out.append({
+            "name": name, "description": row.description, "risk": row.risk,
+            "needs_gate": "MEDOPS_PLUGIN_CONSOLE" if row.risk == "system" else "",
+            "enabled": bool(row.enabled),
+            "gate_ok": not (row.risk == "system" and not os.environ.get("MEDOPS_PLUGIN_CONSOLE")),
+            "imported": True, "kind": meta.get("kind", ""),
+        })
     return out
 
 
@@ -115,6 +106,15 @@ async def set_plugin_state(factory, name: str, enabled: bool) -> dict[str, Any]:
             await s.execute(update(Plugin).where(Plugin.name == name).values(enabled=enabled))
         await s.commit()
     return {"name": name, "enabled": enabled}
+
+
+async def delete_plugin(factory, name: str) -> None:
+    async with factory() as s:
+        row = (await s.scalars(select(Plugin).where(Plugin.name == name))).first()
+        if row is None:
+            raise KeyError(name)
+        await s.delete(row)
+        await s.commit()
 
 
 async def is_enabled(factory, name: str) -> bool:
@@ -142,19 +142,17 @@ async def run_skill(
     """Dispatch to a builtin skill with gate enforcement + optional LLM step."""
     manifest = _BUILTIN_MANIFESTS.get(name)
     if manifest is None and factory is not None:
-        from medops_core.plugins.imports import imported_entry, run_imported  # noqa: PLC0415
+        from medops_core.plugins.imports import imported_entry, run_imported
 
         entry = await imported_entry(factory, name)
         if entry is None:
             raise KeyError(name)
         if not entry["enabled"]:
             raise GateBlocked(f"plugin '{name}' 未启用")
-        # risky imported plugins need the console/search env gate too
-        from medops_core.plugins.registry import PluginManifest as _PM  # noqa: PLC0415
+        from medops_core.plugins.registry import PluginManifest as _PM
 
-        reason = gate_allowed(_PM(name, "", entry["risk"], needs_gate=(
-            "MEDOPS_PLUGIN_CONSOLE" if entry["risk"] == "system" else None
-        )))
+        gate = "MEDOPS_PLUGIN_CONSOLE" if entry["risk"] == "system" else None
+        reason = gate_allowed(_PM(name, "", entry["risk"], needs_gate=gate))
         if reason is not None:
             raise GateBlocked(reason)
         result = await run_imported(
@@ -164,7 +162,6 @@ async def run_skill(
         return {"ok": True, "plugin": name, "imported": True, **result}
     if manifest is None:
         raise KeyError(name)
-    # defense in depth: env gate checked on EVERY invocation
     reason = gate_allowed(manifest)
     if reason is not None:
         raise GateBlocked(reason)
@@ -176,7 +173,7 @@ async def run_skill(
         "registry": registry,
         "args": args,
     }
-    from medops_core.plugins import builtin  # noqa: PLC0415
+    from medops_core.plugins import builtin
 
     fn = getattr(builtin, f"skill_{name}", None)
     if fn is None:
@@ -192,12 +189,12 @@ async def run_skill(
             if enhanced:
                 result["llm_enhanced"] = True
                 result["output"] = enhanced
-        except Exception:  # noqa: BLE001 - enhancement is best effort
+        except Exception:
             pass
     return {"ok": True, "plugin": name, **result}
 
 
-# ---- builtin manifests ---------------------------------------------------
+# ---- builtin manifests
 register_manifest(PluginManifest("prompt_builder", "提示词生成：把需求合成结构化提示词", "safe"))
 register_manifest(PluginManifest("code_guard", "代码生成与检查：修复脚本生成+编译/静态校验",
                     "safe"))

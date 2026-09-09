@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { apiGet, apiPost } from '../api/client'
+import { apiDelete, apiGet, apiPost } from '../api/client'
 
 interface Plugin {
   name: string; description: string; risk: string
@@ -27,6 +27,12 @@ async function load() {
 async function toggle(p: Plugin) {
   await apiPost(`/plugins/${p.name}`, { enabled: !p.enabled })
   ElMessage.success(`插件 ${p.name} 已${p.enabled ? '停用' : '启用'}`)
+  load()
+}
+
+async function remove(p: Plugin) {
+  await apiDelete(`/plugins/${p.name}`)
+  ElMessage.success(`插件 ${p.name} 已卸载`)
   load()
 }
 
@@ -103,6 +109,11 @@ onMounted(load)
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" :disabled="!row.gate_ok && !!row.needs_gate"
                      @change="toggle(row)" />
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="70">
+        <template #default="{ row }">
+          <el-button v-if="row.imported" size="small" type="danger" link @click="remove(row)">卸载</el-button>
         </template>
       </el-table-column>
     </el-table>
