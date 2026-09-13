@@ -325,3 +325,47 @@ class ApiEndpoint(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+class AgentState(Base):
+    """P7a: serialised agent state (session-scoped)."""
+
+    __tablename__ = "agent_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agent: Mapped[str] = mapped_column(String(32), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+
+class AgentMetrics(Base):
+    """P7b: per-agent counters for the introspection dashboard."""
+
+    __tablename__ = "agent_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agent: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    inspections_run: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    alerts_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    work_orders_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    auto_healed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    escalated: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consent_asked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consent_denied: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kb_experience_fed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+
+class InspectionLog(Base):
+    """P7a: archive of every inspection run."""
+
+    __tablename__ = "inspection_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    checked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    alerts_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    work_orders_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    anomalies: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)

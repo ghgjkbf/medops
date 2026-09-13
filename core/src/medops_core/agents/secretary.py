@@ -155,6 +155,8 @@ class SecretaryAgent(BaseAgent):
         if fsm.state == "gathering" and answer:
             nxt = fsm.consume(answer)
             if nxt is not None:
+                # persist FSM so session survives restart
+                await self._persist_fsm()
                 return nxt
             if fsm.state != "spec_ready":
                 return fsm.next_question() or "信息已记录，继续补充一下？"
@@ -163,9 +165,28 @@ class SecretaryAgent(BaseAgent):
             await fsm.execute(self._inspector or self)
             summary = fsm.summarize()
             self._tick_trail(f"{summary}", {"source": "requirement", "intent": fsm.intent})
+            await self._persist_fsm()
             return summary
         question = await fsm.ask()
         return question or "请描述设备异常的大致情况。"
+
+    async def _persist_fsm(self) -> None:
+        """P7a: save the requirement FSM state to DB."""
+        if self._db_factory is None or self._requirement is None:
+            return
+        try:
+            from medops_core.agent_state import save_state
+            await save_state(
+                self._db_factory, "secretary", self._session or "",
+                data={
+                    "state": self._requirement.state,
+                    "intent": self._requirement.intent,
+                    "fields": self._requirement.fields,
+                    "questions": self._requirement._question_index,
+                },
+            )
+        except Exception:
+            pass
 
     def _tick_trail(self, text: str, meta: dict) -> None:  # noqa: ANN001 - meta dict
         if hasattr(self, "_trail") and self._trail is not None:

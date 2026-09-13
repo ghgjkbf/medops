@@ -1,8 +1,8 @@
-# medops
+# medops — 医疗设备运维 Agent 平台
 
-**EN** · An open-source reference implementation of an AI Agent management system for medical device operations: device capabilities are exposed via MCP, and dual agents (secretary Q&A + automated inspection) close the loop from detection and diagnosis to work orders.
+**EN** · An open-source AI Agent platform for medical device operations: multi-agent orchestration (secretary for Q&A, butler for safe management operations, inspector for automated inspection + remediation) closes the loop from detection, diagnosis, repair, to knowledge feedback. Device capabilities are exposed via MCP.
 
-**中文** · 面向医疗设备运维场景的开源 AI Agent 管理系统参考实现——设备能力通过 MCP 标准化接入，双 Agent（秘书问答 + 自动巡检）完成从检测、诊断到工单的闭环。
+**中文** · 面向医疗设备运维场景的开源 AI Agent 平台——多 Agent 编排（秘书问答/管家安全执行/巡检+自动修复）完成从检测、诊断、修复到知识反馈的完整闭环。设备能力通过 MCP 标准化接入。
 
 > ⚠️ **Disclaimer / 免责声明**: All device data is fully simulated. This project does NOT connect to real medical devices and must NOT be used for clinical decision-making.  
 > 全部设备数据为模拟生成，不接入真实医疗设备，不用于临床决策。

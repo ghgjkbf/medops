@@ -119,9 +119,9 @@ class InspectorAgent(BaseAgent):
         registry,
         session_factory,
         session: Session | None = None,
-        notifier=None,  # noqa: ANN001 - Optional[[list[Alert]], None] callback (P3-3)
-        butler=None,  # noqa: ANN001 - ButlerAgent (P5a: inspector doubles as butler)
-        remediation=None,  # noqa: ANN001 - RemediationService (P6a)
+        notifier=None,
+        butler=None,
+        remediation=None,
     ) -> None:
         super().__init__(llm, tools={})
         self._registry = registry
@@ -146,13 +146,11 @@ class InspectorAgent(BaseAgent):
             prefixes = {str(d).split("-")[0] for d in devices}
         return await self.run_inspection(prefixes=prefixes)
 
-    async def plan(self, user_input: str) -> str:  # pragma: no cover - not used
+    async def plan(self, user_input: str) -> str:
         return ""
 
     # ------------------------------------------------------------------ core
     async def run_inspection(self, prefixes: set[str] | None = None) -> InspectionResult:
-        """Scheduled inspection; ``prefixes`` limits the device types (P6b)."""
-
         result = InspectionResult()
         mcp_unavailable: list[str] = []
         for handle in self._registry.handles.values():
@@ -172,10 +170,8 @@ class InspectorAgent(BaseAgent):
                     continue
                 try:
                     payload = await handle.call_tool(tool)
-                except Exception as exc:  # noqa: BLE001 - degraded detection
-                    result.tool_results[f"{handle.config.name}.{tool}"] = {
-                        "error": str(exc)
-                    }
+                except Exception as exc:
+                    result.tool_results[f"{handle.config.name}.{tool}"] = {"error": str(exc)}
                     continue
                 result.tool_results[f"{handle.config.name}.{tool}"] = payload
                 metrics = _extract_metrics(tool, payload if isinstance(payload, dict) else {})
@@ -201,26 +197,56 @@ class InspectorAgent(BaseAgent):
 
         if result.anomalies:
             alerts = await self._store_alerts(result.anomalies)
-            try:  # KB suggestion attached to attribution (best effort)
-                from medops_core import knowledge  # noqa: PLC0415
-
+            try:
+                from medops_core import knowledge
                 await knowledge.enrich_alerts(self._session_factory, alerts)
-            except Exception:  # noqa: BLE001 - KB is optional
+            except Exception:
                 pass
             result.alerts_created = len(alerts)
             if self._remediation is not None:
                 try:
                     await self._attach_remediation(alerts, result.anomalies, mcp_unavailable)
-                except Exception:  # noqa: BLE001 - never break the inspection
+                except Exception:
                     pass
             critical = [a for a in alerts if a.level == AlertLevel.CRITICAL.value]
             result.work_orders_created = await self._create_work_orders(critical)
             if self._notifier is not None and alerts:
                 try:
                     self._notifier(alerts)
-                except Exception:  # noqa: BLE001 - push must never break inspection
+                except Exception:
                     pass
         result.provider_used = getattr(self.llm, "provider_name", "llm")
+
+        # P7a: persist inspection log + metrics
+        try:
+            from medops_core.agent_state import log_inspection, record_metrics
+            await log_inspection(self._session_factory, {
+                "checked_servers": result.checked_servers,
+                "alerts_created": result.alerts_created,
+                "work_orders_created": result.work_orders_created,
+                "anomalies": [{"device_id": a.device_id, "rule": a.rule, "message": a.message}
+                              for a in unique_anomalies],
+            })
+            await record_metrics(self._session_factory, "inspector", "",
+                                 {"inspections_run": 1,
+                                  "alerts_created": result.alerts_created,
+                                  "work_orders_created": len(result.work_orders_created)})
+        except Exception:
+            pass
+
+        # P7f: MCP self-heal — re-register unavailable servers
+        for name in mcp_unavailable:
+            try:
+                from medops_core import remediation as _rem
+                plan = _rem.classify({"rule": "mcp:unavailable",
+                                     "message": f"MCP server {name} unavailable",
+                                     "device_id": name},
+                                    signals={"mcp_unavailable": [name]})
+                action = _rem.platform_actions(plan)[0]
+                if self._butler is not None:
+                    await self._butler.execute_task(action["task"])
+            except Exception:
+                pass
         return result
 
     async def _attach_remediation(
@@ -235,7 +261,7 @@ class InspectorAgent(BaseAgent):
                 outcome = await self._remediation.heal(
                     hit, signals={"mcp_unavailable": signals}
                 )
-            except Exception as exc:  # noqa: BLE001 - triage must never break inspection
+            except Exception as exc:
                 outcome = {"kind": "unknown", "error": f"{type(exc).__name__}: {exc}"}
             outcomes.setdefault(hit.device_id, []).append(outcome)
         session = self._session or self._session_factory()
@@ -253,7 +279,7 @@ class InspectorAgent(BaseAgent):
                 await session.close()
 
     async def _store_alerts(self, hits: list[RuleHit]) -> list[Alert]:
-        from medops_core.log_pipeline.analyzer import attribute_and_store  # noqa: PLC0415
+        from medops_core.log_pipeline.analyzer import attribute_and_store
 
         session = self._session or self._session_factory()
         try:
@@ -269,8 +295,6 @@ class InspectorAgent(BaseAgent):
         session = self._session or self._session_factory()
         try:
             for alert in critical_alerts:
-                # dedupe on device+attribution signature: the same recurring
-                # fault must not spawn duplicate orders across runs
                 signature = (alert.message or "")[:60]
                 dedupe = f"inspect-{alert.device_id}-{hash(signature) & 0xFFFF:04x}"
                 existing = (
@@ -292,7 +316,6 @@ class InspectorAgent(BaseAgent):
                 session.add(order)
                 await session.flush()
                 ids.append(order.id)
-                # alert may be detached (created on another session): UPDATE by id
                 await session.execute(
                     update(Alert).where(Alert.id == alert.id).values(work_order_id=order.id)
                 )

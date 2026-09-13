@@ -54,3 +54,4 @@ WORK_ORDER_TRANSITIONS: dict[str, set[str]] = {
 def can_transition_work_order(current: str, new: str) -> bool:
     """True only for a legal state-machine transition between known statuses."""
     return new in WORK_ORDER_TRANSITIONS.get(current, set())
+KEEP_SQLITE = False

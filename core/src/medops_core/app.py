@@ -164,8 +164,9 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         app.state.remediation = remediation_service
         # import plugins/ directory manifests on startup
         try:
-            from medops_core.plugins.imports import import_plugin as _ip
             import json
+
+            from medops_core.plugins.imports import import_plugin as _ip
             pdir = Path(__file__).resolve().parent.parent.parent.parent.parent / "plugins"
             if pdir.is_dir():
                 for f in sorted(pdir.iterdir()):
@@ -617,6 +618,38 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         return {"ok": True, "data": outcome}
+
+    # ------------------------------------------------- Agent introspection (P7a/b)
+    @application.get("/api/v1/agent-metrics")
+    async def agent_metrics() -> dict:
+        from medops_core.agent_state import get_metrics
+
+        items = await get_metrics(application.state.db_factory)
+        return {"ok": True, "data": {"count": len(items), "items": items}}
+
+    @application.get("/api/v1/inspection-log")
+    async def inspection_log(
+        page: int = 1, page_size: int = 20,
+    ) -> dict:
+        from sqlalchemy import desc, select
+
+        from medops_core.models import InspectionLog
+
+        factory = application.state.db_factory
+        async with factory() as s:
+            rows = (await s.scalars(
+                select(InspectionLog).order_by(desc(InspectionLog.created_at))
+            )).all()
+            items = [
+                {c.name: getattr(r, c.name) for c in r.__table__.columns}
+                for r in rows
+            ]
+        total = len(items)
+        start = (page - 1) * page_size
+        return {"ok": True, "data": {
+            "total": total, "page": page, "page_size": page_size,
+            "items": items[start:start + page_size],
+        }}
 
     # ------------------------------------------------- resource API (P3-1)
     @application.get("/api/v1/devices")

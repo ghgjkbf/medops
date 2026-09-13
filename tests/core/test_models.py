@@ -62,6 +62,9 @@ async def test_core_tables_exist(initialized_engine: AsyncEngine) -> None:
         "butler_audit",
         "knowledge_source",
         "plugin",
+        "agent_state",
+        "agent_metrics",
+        "inspection_log",
     }
     assert expected == set(Base.metadata.tables.keys())
 

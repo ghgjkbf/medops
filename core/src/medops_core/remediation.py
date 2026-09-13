@@ -245,13 +245,21 @@ class RemediationService:
                 return {**base, "consent": "deny", "executed": False}
             try:
                 await handle.call_tool(tool, args)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 return {**base, "executed": False, "error": str(exc), "consent": "allow"}
             verified = await self._verify_device(handle, plan.rule)
             escalated = False
             if not verified:
                 escalated = True
                 await self._escalate(plan)
+            else:
+                # P7c: knowledge feedback — successful repair becomes an experience
+                await self._feed_experience(
+                    factory=self._session_factory,
+                    device_id=plan.device_id,
+                    rule=plan.rule,
+                    message=plan.message,
+                )
             return {
                 **base,
                 "executed": True,
@@ -259,6 +267,30 @@ class RemediationService:
                 "escalated": escalated,
                 "repair": {"tool": tool},
             }
+
+    @staticmethod
+    async def _feed_experience(
+        factory, device_id: str, rule: str, message: str
+    ) -> None:
+        """P7c: push a successful repair as a knowledge entry."""
+        if factory is None:
+            return
+        try:
+            from medops_core import knowledge as _kb
+            await _kb.add_document(
+                factory,
+                title=f"经验：{device_id} {rule}",
+                content=(
+                    f"故障：{message}\n"
+                    f"设备：{device_id}\n"
+                    f"规则：{rule}\n"
+                    f"处置结果：自动修复成功\n"
+                    f"来源：RepairService 自动经验反馈"
+                ),
+                device_type=device_id.split("-")[0],
+            )
+        except Exception:
+            pass
 
         # ---------------------------------------------------------- hardware
         return {**base, "need_consent": False, "plan": self._hardware_package(plan)}
