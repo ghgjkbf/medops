@@ -4,9 +4,12 @@ registry (env gate + enable state)."""
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from medops_core.agents.requirements import synthesize_prompt
+
+_LOG = logging.getLogger("medops")
 
 
 # --------------------------------------------------------------- prompt builder
@@ -192,7 +195,7 @@ async def skill_doc_searcher(ctx: dict[str, Any]) -> dict[str, Any]:
             with urllib.request.urlopen(online_url, timeout=5) as resp:
                 results = json.load(resp).get("results", results)
         except Exception:  # noqa: BLE001 - offline result kept
-            pass
+            _LOG.warning("online doc search failed, offline result kept", exc_info=True)
     return {"query": query, "results": results, "source": "offline" if not online_url else "online"}
 
 

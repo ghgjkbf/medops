@@ -10,6 +10,7 @@ findings only produce a work order for human confirmation.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -22,6 +23,8 @@ from sqlalchemy.orm import Session
 from medops_core.agents.base import BaseAgent
 from medops_core.log_pipeline.rules import RuleHit
 from medops_core.models import Alert, WorkOrder
+
+_LOG = logging.getLogger("medops")
 
 # Tools that never run inside an automated inspection (HIGH_RISK_WRITE).
 _FORBIDDEN_TOOLS = {"set_fault_scenario", "create_work_order", "update_work_order"}
@@ -201,20 +204,20 @@ class InspectorAgent(BaseAgent):
                 from medops_core import knowledge
                 await knowledge.enrich_alerts(self._session_factory, alerts)
             except Exception:
-                pass
+                _LOG.warning("degraded detection: tool call failed", exc_info=True)
             result.alerts_created = len(alerts)
             if self._remediation is not None:
                 try:
                     await self._attach_remediation(alerts, result.anomalies, mcp_unavailable)
                 except Exception:
-                    pass
+                    _LOG.warning("MCP self-heal attempt failed", exc_info=True)
             critical = [a for a in alerts if a.level == AlertLevel.CRITICAL.value]
             result.work_orders_created = await self._create_work_orders(critical)
             if self._notifier is not None and alerts:
                 try:
                     self._notifier(alerts)
                 except Exception:
-                    pass
+                    _LOG.warning("agent_state log skipped", exc_info=True)
         result.provider_used = getattr(self.llm, "provider_name", "llm")
 
         # P7a: persist inspection log + metrics
@@ -232,7 +235,7 @@ class InspectorAgent(BaseAgent):
                                   "alerts_created": result.alerts_created,
                                   "work_orders_created": len(result.work_orders_created)})
         except Exception:
-            pass
+            _LOG.warning("alert remediation attach skipped", exc_info=True)
 
         # P7f: MCP self-heal — re-register unavailable servers
         for name in mcp_unavailable:
@@ -246,7 +249,7 @@ class InspectorAgent(BaseAgent):
                 if self._butler is not None:
                     await self._butler.execute_task(action["task"])
             except Exception:
-                pass
+                _LOG.warning("degraded detection fallback failed", exc_info=True)
         return result
 
     async def _attach_remediation(

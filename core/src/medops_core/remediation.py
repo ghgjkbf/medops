@@ -17,11 +17,14 @@ checks the verdict (``llm.check_classification``) but never runs without rules.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from medops_core.log_pipeline.rules import RuleHit
+
+_LOG = logging.getLogger("medops")
 
 KIND_PLATFORM_SW = "platform_sw"
 KIND_DEVICE_SW = "device_sw"
@@ -185,7 +188,7 @@ class RemediationService:
         try:
             await self._butler.execute_task("创建工单")
         except Exception:  # noqa: BLE001 - escalation is best effort
-            pass
+            _LOG.warning("remediation escalation (work order) failed", exc_info=True)
 
     async def heal(
         self,
@@ -294,4 +297,4 @@ class RemediationService:
                 device_type=device_id.split("-")[0],
             )
         except Exception:
-            pass
+            _LOG.warning("knowledge feedback (experience) failed", exc_info=True)

@@ -84,6 +84,8 @@ from medops_core.schemas import (
 )
 from medops_core.ws import ConnectionManager, WebSocketSink
 
+_LOG = logging.getLogger("medops")
+
 
 def build_llm() -> LLMClient | FakeLLM:
     if os.environ.get("MEDOPS_LLM_MODE", "").lower() == "fake":
@@ -92,7 +94,7 @@ def build_llm() -> LLMClient | FakeLLM:
     try:  # DB-registered LLM endpoints join the fallback chain (env first)
         providers.extend(llm_providers_from_db())
     except Exception:  # noqa: BLE001 - degraded mode (no DB)
-        pass
+        _LOG.warning("degraded mode: startup step failed", exc_info=True)
     if not providers:
         return FakeLLM(text="[fake] 未配置 LLM provider，使用模拟回答")
     return LLMClient(providers=providers)
@@ -120,11 +122,11 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
         try:
             seeded = await knowledge.seed_builtin(async_session_factory)
             if seeded:
-                logging.getLogger("medops").info(
+                _LOG.info(
                     "knowledge: seeded %d builtin docs", seeded
                 )
         except Exception:  # noqa: BLE001 - degraded mode
-            logging.getLogger("medops").warning("knowledge seed skipped", exc_info=True)
+            _LOG.warning("knowledge seed skipped", exc_info=True)
 
         # alert push chain: inspector -> notifier -> WebSocketSink broadcast
         ws_sink = WebSocketSink(app.state.ws_manager)
@@ -177,9 +179,9 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                                      m["kind"], m.get("description", ""),
                                      m.get("risk", "safe"), m.get("config", {}))
                         except Exception:
-                            pass
+                            _LOG.debug("plugin manifest skipped", exc_info=True)
         except Exception:
-            pass
+            _LOG.warning("startup plugin scan failed", exc_info=True)
         sync_task = asyncio.create_task(_source_syncer(app))
         status_task = asyncio.create_task(_status_broadcaster(app))
         try:
@@ -324,7 +326,7 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                 )
                 await session.commit()
         except Exception:  # noqa: BLE001 - persistence is best-effort
-            pass
+            _LOG.warning("chat persistence failed", exc_info=True)
         return {
             "answer": answer,
             "trajectory": trajectory,
@@ -1106,10 +1108,10 @@ def create_app(inspect_seconds: int | None = None) -> FastAPI:
                     ))
                     await s.commit()
             except Exception:  # noqa: BLE001 - persistence is best effort
-                pass
+                _LOG.warning("websocket send failed", exc_info=True)
             await ws.close()
         except WebSocketDisconnect:
-            pass
+            _LOG.debug("websocket client disconnected", exc_info=True)
 
     # ------------------------------------------------- static frontend (P3-5)
     # Production single-process mode: serve web/dist if it has been built.

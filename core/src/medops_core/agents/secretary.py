@@ -8,6 +8,7 @@ returned and persisted (chat_session / chat_message.tool_trace).
 from __future__ import annotations
 
 import inspect
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ from medops_core.agents.base import BaseAgent, ToolCall
 from medops_core.mcp_client.registry import MCPRegistry
 from medops_core.models import ChatMessage, ChatSession
 from medops_core.reporting import device_fault_report
+
+_LOG = logging.getLogger("medops")
 
 # Intent rules: (pattern, intent, tool_hint) — first match wins. Rules keep
 # tool selection deterministic; the LLM only phrases the final answer.
@@ -185,14 +188,14 @@ class SecretaryAgent(BaseAgent):
                 },
             )
         except Exception:
-            pass
+            _LOG.warning("requirement FSM persistence skipped", exc_info=True)
 
     def _tick_trail(self, text: str, meta: dict) -> None:  # noqa: ANN001 - meta dict
         if hasattr(self, "_trail") and self._trail is not None:
             try:
                 self._trail.append({"role": "user", "content": text, **meta})
             except Exception:  # noqa: BLE001
-                pass
+                _LOG.debug("trajectory append failed", exc_info=True)
 
     async def plan(self, user_input: str) -> str:  # noqa: C901 - intent dispatch
         # P6b: requirement-gathering mode takes precedence over intent dispatch
@@ -224,7 +227,7 @@ class SecretaryAgent(BaseAgent):
                         try:
                             raw = json.loads(raw)
                         except json.JSONDecodeError:
-                            pass
+                            _LOG.debug("tool payload was not JSON text", exc_info=True)
                     tool_payload = raw if isinstance(raw, dict) else {"result": raw}
                     self._trajectory.append(
                         ToolCall(

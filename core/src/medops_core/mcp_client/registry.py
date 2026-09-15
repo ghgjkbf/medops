@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Callable
 from enum import StrEnum
 from typing import Any
 
 from mcp.client import Client
 from pydantic import BaseModel, Field
+
+_LOG = logging.getLogger("medops")
 
 
 class ServerState(StrEnum):
@@ -127,7 +130,7 @@ class ServerHandle:
             try:
                 await self._client.__aexit__(None, None, None)
             except Exception:  # noqa: BLE001 - best-effort teardown
-                pass
+                _LOG.warning("MCP handle teardown failed", exc_info=True)
             self._client = None
             self.state = ServerState.UNAVAILABLE
 

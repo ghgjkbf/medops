@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from medops_core.agents.inspector import InspectionResult, InspectorAgent
 from medops_core.db import async_session_factory
 from medops_core.reminders import scan_and_remind
+
+_LOG = logging.getLogger("medops")
 
 
 class InspectionScheduler:
@@ -58,7 +62,7 @@ class InspectionScheduler:
         try:
             await scan_and_remind(async_session_factory)
         except Exception:  # noqa: BLE001 - scheduled job must never crash the app
-            pass
+            _LOG.warning("scheduled job raised, kept app alive", exc_info=True)
 
     async def run_now(self) -> InspectionResult:
         """Manual trigger (API endpoint); also refreshes last_result."""

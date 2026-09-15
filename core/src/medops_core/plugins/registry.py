@@ -9,6 +9,7 @@ refuse to act without the env gate (defense in depth).
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from typing import Any
 from sqlalchemy import select, update
 
 from medops_core.models import Plugin
+
+_LOG = logging.getLogger("medops")
 
 SkillFn = Callable[[dict[str, Any]], "Awaitable[dict[str, Any]] | dict[str, Any]"]
 
@@ -190,7 +193,7 @@ async def run_skill(
                 result["llm_enhanced"] = True
                 result["output"] = enhanced
         except Exception:
-            pass
+            _LOG.warning("LLM enhancement skipped", exc_info=True)
     return {"ok": True, "plugin": name, **result}
 
 
