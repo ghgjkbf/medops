@@ -117,6 +117,9 @@ async def test_add():
 
 ## 7. 环境复现
 
+> 注：`.venv-spike/` 是一次性验证环境，验证完成后已清理（`.gitignore` 已忽略）。
+> 需要重跑时按下面命令重建即可。
+
 ```bash
 uv venv .venv-spike
 uv pip install --python .venv-spike/Scripts/python.exe "mcp[cli]>=2,<3"

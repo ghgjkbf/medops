@@ -28,6 +28,47 @@
 
 设计文档 / Design doc: [`docs/specs/2026-08-31-medops-design.md`](docs/specs/2026-08-31-medops-design.md)
 
+## Project Layout / 项目结构
+
+```
+medops/
+├── core/            业务后端（FastAPI 应用 + Agent + 数据层）
+│   ├── src/medops_core/
+│   │   ├── app.py           应用工厂：状态装配 / 中间件 / lifespan / SPA 兜底
+│   │   ├── bootstrap.py     LLM 降级链构建（DeepSeek→Qwen→Ollama→fake）
+│   │   ├── routers/         API 路由，按域拆分
+│   │   │   ├── system.py       健康 / Agent 状态 / 指标 / 巡检日志
+│   │   │   ├── agents.py       智能问答 / 管家任务与审计
+│   │   │   ├── mcp.py          MCP 注册表 / 外部 API 接入
+│   │   │   ├── knowledge.py    知识库文档 / 知识源绑定
+│   │   │   ├── plugins.py      插件 CRUD / 导入 / 运行
+│   │   │   ├── resources.py    设备 / 告警(含处置同意) / 工单
+│   │   │   ├── maintenance.py  维保计划与记录 / 日志 / 指标 / 报告
+│   │   │   └── websockets.py   仪表盘推送 / 流式聊天
+│   │   ├── agents/          秘书 / 管家 / 巡检 / 需求采集 FSM / LLM 客户端
+│   │   ├── log_pipeline/    日志规则引擎 + 归因落库
+│   │   ├── mcp_client/      MCP 客户端连接管理
+│   │   ├── plugins/         插件注册表 + 5 个内置技能
+│   │   ├── knowledge.py     三层检索（关键词 / 向量 / 传统）
+│   │   ├── remediation.py   三通道故障分流处置
+│   │   ├── models.py        ORM 模型
+│   │   └── sources.py       外部知识源抓取与同步
+│   └── alembic/            数据库迁移
+├── common/          共享常量、阈值表、通用 schema（medops-common）
+├── devices/         模拟设备层：engine 剧本引擎 + sim 模拟器
+├── mcp_servers/     设备能力接入：ct / dr / ventilator / ecg / device-status / maintenance-db
+├── web/             管理控制台（Vue3 + Element Plus + ECharts）
+├── plugins/         外部插件清单（*.json，启动时自动导入）
+├── tests/           测试套件（core / engine / mcp / sim / eval / common）
+├── scripts/         启动脚本与演示：start.bat / stop.bat / demo_*.sh / experiment_p3.sh
+├── deploy/          部署配置与本地 PG 数据（pgdata 不入库）
+├── docs/            设计文档、架构说明、开发笔记
+│   ├── specs/       设计规格
+│   └── notes/       实现笔记（MCP SDK、Agent 工具调用规范）
+├── spikes/          一次性验证脚本（不计入 lint）
+└── .github/         CI 工作流（ruff / pytest+覆盖率 / web 构建）
+```
+
 **Current status / 当前状态**: P6 done — **v0.5.0-p6c**（故障分流处置 + 秘书需求采集 + 内置插件）。Web console (Vue3 + Element Plus + ECharts): dashboard with real-time alert stream, device ledger with metric trends, alert center (one-click → work order, delete/clear), work-order kanban with FSM-enforced transitions, maintenance plan/record management with due highlighting, MCP registry with runtime quick-config, external API onboarding page, secretary-agent chat with tool-trace timeline (butler operations included), knowledge base (search / file import / external source binding), plugin panel (5 builtin skills), data cleanup, in-app usage guide. Backend: resource API + delete/cleanup, knowledge base with three retrieval backends (jieba+bm25s keyword / fastembed+sqlite-vec vector / 2-gram legacy), butler agent with risk-gated management operations + audit trail, three-channel fault remediation (platform software auto / device software user-consent / hardware plan package), secretary requirement-gathering FSM + targeted inspection, plugin registry with env-gated risky skills, WebSocket (`/ws/dashboard`, `/ws/chat`), maintenance reminders, external API onboarding with inbound API-key auth, hidden-window quick start. 410+ tests green, ruff clean, web build green, golden evaluation 30/30. One-command demos: `bash scripts/demo_p1.sh` · `bash scripts/demo_p2.sh` · `bash scripts/experiment_p3.sh`. / P6 完成——**v0.5.0-p6c**（三通道故障分流处置：平台软件自动修复/设备软件先询问/硬件方案包+指导；秘书需求采集：模糊输入→追问→完整提示词→定向巡检；内置插件：提示词生成/代码生成+检查/寻找工具/电脑控制/电脑搜索，后两者门控默认关）。控制台：总览大盘、设备台账、告警中心（含处置建议+确认）、工单看板、维保管理、MCP 服务（快捷配置）、API 接入、智能问答（含管家操作轨迹）、知识库（搜索/导入/知识源绑定）、插件面板、数据清理、使用说明。后端：资源 API+删除清理、三层知识检索、管家 Agent（风险分级+确认+审计）、WebSocket、周期提醒、外部 API 接入、隐藏窗口一键启动。410+ 测试全绿，golden 评测 30/30。一键演示 `bash scripts/demo_p1.sh` / `bash scripts/demo_p2.sh` / `bash scripts/experiment_p3.sh`。
 
 ## ⚠️ Disclaimer / 免责声明
