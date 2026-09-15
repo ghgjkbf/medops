@@ -88,6 +88,15 @@ async function remove(doc: Doc) {
   load(query.value || undefined)
 }
 
+const detailVisible = ref(false)
+const detailTitle = ref('')
+const detailContent = ref('')
+function detail(doc: Doc) {
+  detailTitle.value = doc.title
+  detailContent.value = doc.content
+  detailVisible.value = true
+}
+
 async function onChange(_file: unknown, files: UploadUserFile[]) {
   if (!files.length) return
   const f = files[files.length - 1].raw
@@ -151,12 +160,17 @@ onMounted(() => { load(); loadSources() })
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column label="操作" width="120">
           <template #default="{ row }">
+            <el-button size="small" type="primary" link @click="detail(row)">查看详情</el-button>
             <el-button size="small" type="danger" link @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
+
+      <el-dialog v-model="detailVisible" :title="detailTitle" width="640px">
+        <div class="detail-body">{{ detailContent }}</div>
+      </el-dialog>
 
       <el-alert
         class="mt16" type="info" :closable="false"
@@ -219,6 +233,7 @@ onMounted(() => { load(); loadSources() })
 <style scoped>
 .head { display: flex; justify-content: space-between; align-items: center; }
 .toolbar { display: flex; gap: 10px; }
+.detail-body { white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
 .mt12 { margin-top: 12px; }
 .mt16 { margin-top: 16px; }
 .src { margin-left: 6px; }

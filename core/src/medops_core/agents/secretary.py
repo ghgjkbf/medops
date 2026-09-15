@@ -271,21 +271,43 @@ class SecretaryAgent(BaseAgent):
             )
 
         context_lines: list[str] = []
-        if tool_payload:
-            for key in ("status", "metrics", "params", "detector_temp", "waveform_snr"):
-                if key in tool_payload:
-                    context_lines.append(f"{key}: {tool_payload[key]}")
-            if not context_lines:
-                context_lines.append(str(tool_payload)[:300])
-        if builtin_payload is not None:
-            if intent.tool == "search_knowledge":
-                hits = builtin_payload if isinstance(builtin_payload, list) else []
-                for i, hit in enumerate(hits, 1):
-                    context_lines.append(
-                        f"知识库[{i}] {hit['title']}：{hit['content'][:150]}"
-                    )
-            elif isinstance(builtin_payload, dict):  # fault report
-                context_lines.append(str(builtin_payload.get("markdown", ""))[:800])
+        # ---- knowledge-first: if KB search returned results with high relevance,
+        # answer directly without LLM (handles "no device connected" + "LLM down" cases)
+        kb_answer: str | None = None
+        if intent.name == "knowledge" and intent.tool == "search_knowledge" and "search_knowledge" in self.tools:
+            args: dict[str, Any] = {"query": user_input}
+            builtin_kb = await self._run_builtin("search_knowledge", args)
+            if isinstance(builtin_kb, list) and builtin_kb:
+                # format a complete KB answer from doc content
+                lines = []
+                for i, hit in enumerate(builtin_kb, 1):
+                    title = hit.get("title", "")
+                    content = hit.get("content", "")
+                    lines.append(f"#{i} {title}\n{content}")
+                    context_lines.append(f"知识库[{i}] {title}：{content[:150]}")
+                if lines:
+                    kb_answer = "\n\n".join(lines)
+        if not kb_answer:
+            # normal KB context gathering still runs for non-knowledge intents
+            if tool_payload:
+                for key in ("status", "metrics", "params", "detector_temp", "waveform_snr"):
+                    if key in tool_payload:
+                        context_lines.append(f"{key}: {tool_payload[key]}")
+                if not context_lines:
+                    context_lines.append(str(tool_payload)[:300])
+            if builtin_payload is not None:
+                if intent.tool == "search_knowledge":
+                    hits = builtin_payload if isinstance(builtin_payload, list) else []
+                    for i, hit in enumerate(hits, 1):
+                        context_lines.append(
+                            f"知识库[{i}] {hit['title']}：{hit['content'][:150]}"
+                        )
+                elif isinstance(builtin_payload, dict):
+                    context_lines.append(str(builtin_payload.get("markdown", ""))[:800])
+
+        if kb_answer:
+            await self._persist(user_input, kb_answer, intent)
+            return kb_answer
         if isinstance(butler_result, dict):
             if butler_result.get("status") == "pending_confirmation":
                 context_lines.append(
