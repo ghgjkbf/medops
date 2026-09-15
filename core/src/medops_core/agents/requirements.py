@@ -25,7 +25,10 @@ _DEVICE_KEYWORDS: dict[str, str] = {
     "ecg": "ecg-sim-01",
 }
 
-_VAGUE_HINTS = ("有点问题", "不太对劲", "不对劲", "好像", "坏了", "不正常", "有点怪", "出问题", "故障了", "有问题")
+_VAGUE_HINTS = (
+    "有点问题", "不太对劲", "不对劲", "好像", "坏了",
+    "不正常", "有点怪", "出问题", "故障了", "有问题",
+)
 _START_HINTS = ("帮我查", "检查一下", "看看", "排查", "折腾", "怎么了", "没事吧")
 
 # (slot, question template) — per intent, at most three rounds.
@@ -251,5 +254,8 @@ class RequirementFSM:
                 f"- {item.get('device_id', '?')}: {item.get('message', '')}"
                 f"（规则 {item.get('rule', '?')}）"
             )
-        lines.append("处置建议：请查看告警处置面板（平台软件自动修复 / 设备软件需确认 / 硬件生成方案）。")
+        lines.append(
+            "处置建议：请查看告警处置面板"
+            "（平台软件自动修复 / 设备软件需确认 / 硬件生成方案）。"
+        )
         return "\n".join(lines)

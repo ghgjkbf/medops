@@ -268,6 +268,9 @@ class RemediationService:
                 "repair": {"tool": tool},
             }
 
+        # ---------------------------------------------------------- hardware
+        return {**base, "need_consent": False, "plan": self._hardware_package(plan)}
+
     @staticmethod
     async def _feed_experience(
         factory, device_id: str, rule: str, message: str
@@ -277,6 +280,7 @@ class RemediationService:
             return
         try:
             from medops_core import knowledge as _kb
+
             await _kb.add_document(
                 factory,
                 title=f"经验：{device_id} {rule}",
@@ -291,6 +295,3 @@ class RemediationService:
             )
         except Exception:
             pass
-
-        # ---------------------------------------------------------- hardware
-        return {**base, "need_consent": False, "plan": self._hardware_package(plan)}

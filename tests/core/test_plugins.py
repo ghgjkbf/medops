@@ -207,7 +207,8 @@ async def test_import_plugin_persists_and_lists(factory):
     from medops_core.plugins.imports import import_plugin
 
     await import_plugin(factory, "demo_ext", "prompt_template",
-                        description="外部演示插件", config={"template": "巡检 {device} 重点看 {focus}"})
+                        description="外部演示插件",
+                        config={"template": "巡检 {device} 重点看 {focus}"})
     items = await list_plugins(factory)
     ext = next(i for i in items if i["name"] == "demo_ext")
     assert ext["imported"] is True

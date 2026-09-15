@@ -161,7 +161,6 @@ class SecretaryAgent(BaseAgent):
             if fsm.state != "spec_ready":
                 return fsm.next_question() or "信息已记录，继续补充一下？"
         if fsm.state == "spec_ready":
-            spec = fsm.synthesize()
             await fsm.execute(self._inspector or self)
             summary = fsm.summarize()
             self._tick_trail(f"{summary}", {"source": "requirement", "intent": fsm.intent})
@@ -274,7 +273,8 @@ class SecretaryAgent(BaseAgent):
         # ---- knowledge-first: if KB search returned results with high relevance,
         # answer directly without LLM (handles "no device connected" + "LLM down" cases)
         kb_answer: str | None = None
-        if intent.name == "knowledge" and intent.tool == "search_knowledge" and "search_knowledge" in self.tools:
+        kb_intent = intent.name == "knowledge" and intent.tool == "search_knowledge"
+        if kb_intent and "search_knowledge" in self.tools:
             args: dict[str, Any] = {"query": user_input}
             builtin_kb = await self._run_builtin("search_knowledge", args)
             if isinstance(builtin_kb, list) and builtin_kb:

@@ -336,8 +336,12 @@ class AgentState(Base):
     agent: Mapped[str] = mapped_column(String(32), nullable=False)
     session_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     data: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
 
 
 class AgentMetrics(Base):
@@ -355,7 +359,9 @@ class AgentMetrics(Base):
     consent_asked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     consent_denied: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     kb_experience_fed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
 
 
 class InspectionLog(Base):
@@ -368,4 +374,6 @@ class InspectionLog(Base):
     alerts_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     work_orders_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     anomalies: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
